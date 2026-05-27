@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers } from 'lucide-react';
 import type { Deck } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
+import { parseImportData } from '../utils/importParser';
 
 interface DashboardScreenProps {
   decks: Deck[];
@@ -58,44 +59,30 @@ export function DashboardScreen({
     e.preventDefault();
     setImportError(null);
     
-    if (!importJSON.trim()) {
-      setImportError('Wklej kod JSON.');
+    const text = importJSON.trim();
+    if (!text) {
+      setImportError('Wklej dane do zaimportowania.');
       return;
     }
 
     setIsImporting(true);
     try {
-      const parsed = JSON.parse(importJSON.trim());
-      
       let finalName = importName.trim();
       let finalDesc = importDesc.trim();
-      let cardsList: { front: string; back: string }[] = [];
 
-      // Sprawdzenie struktury JSON (czy cały obiekt talii, czy tablica)
-      if (Array.isArray(parsed)) {
-        cardsList = parsed;
-      } else if (parsed && typeof parsed === 'object') {
-        if (parsed.name) finalName = parsed.name;
-        if (parsed.description) finalDesc = parsed.description;
-        if (Array.isArray(parsed.cards)) {
-          cardsList = parsed.cards;
-        } else {
-          throw new Error('Obiekt JSON musi zawierać tablicę "cards".');
-        }
-      } else {
-        throw new Error('JSON musi być tablicą fiszek lub obiektem talii.');
+      // Próba automatycznego wyciągnięcia nazwy i opisu z JSON, jeśli to obiekt
+      if (text.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object') {
+            if (parsed.name) finalName = parsed.name;
+            if (parsed.description) finalDesc = parsed.description;
+          }
+        } catch (_) {}
       }
 
-      // Walidacja kart
-      if (cardsList.length === 0) {
-        throw new Error('Brak fiszek do zaimportowania.');
-      }
-
-      cardsList.forEach((card, index) => {
-        if (typeof card !== 'object' || !card.front || !card.back) {
-          throw new Error(`Karta na indeksie ${index} nie posiada wymaganych pól "front" i "back".`);
-        }
-      });
+      // Użycie uniwersalnego parsera
+      const cardsList = parseImportData(text);
 
       if (!finalName) {
         throw new Error('Musisz podać nazwę talii.');
@@ -108,7 +95,7 @@ export function DashboardScreen({
       setShowImportModal(false);
     } catch (err: any) {
       console.error(err);
-      setImportError(err.message || 'Niepoprawny format JSON.');
+      setImportError(err.message || 'Niepoprawny format danych.');
     } finally {
       setIsImporting(false);
     }
@@ -269,7 +256,7 @@ export function DashboardScreen({
         <div className="modal-overlay">
           <div className="modal-content glass animate-fade-in" style={{ maxWidth: '520px' }}>
             <div className="modal-header">
-              <h3 className="modal-title">Importuj talię z JSON</h3>
+              <h3 className="modal-title">Importuj talię</h3>
               <button className="close-btn" onClick={() => setShowImportModal(false)}>
                 <X size={20} />
               </button>
@@ -282,7 +269,7 @@ export function DashboardScreen({
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="Wpisz jeśli brak w JSON" 
+                    placeholder="Wpisz jeśli brak w danych" 
                     value={importName}
                     onChange={(e) => setImportName(e.target.value)}
                     maxLength={50}
@@ -293,7 +280,7 @@ export function DashboardScreen({
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="Wpisz jeśli brak w JSON" 
+                    placeholder="Wpisz jeśli brak w danych" 
                     value={importDesc}
                     onChange={(e) => setImportDesc(e.target.value)}
                     maxLength={100}
@@ -302,11 +289,11 @@ export function DashboardScreen({
               </div>
 
               <div className="form-group">
-                <label className="form-label">Wklej JSON</label>
+                <label className="form-label">Wklej dane (JSON, CSV, Excel)</label>
                 <textarea 
                   className="form-input" 
                   style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
-                  placeholder='Wklej tablicę kart lub obiekt talii...'
+                  placeholder="Wklej tablicę JSON, dane CSV (rozdzielane ;) lub skopiowane kolumny z Excela..."
                   value={importJSON}
                   onChange={(e) => setImportJSON(e.target.value)}
                   required
@@ -320,21 +307,23 @@ export function DashboardScreen({
               )}
 
               <div style={{ marginBottom: '16px' }}>
-                <span className="form-label" style={{ marginBottom: '4px' }}>Dozwolone schematy JSON:</span>
+                <span className="form-label" style={{ marginBottom: '4px' }}>Dozwolone schematy danych:</span>
                 <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-{`// Opcja 1: Pełna talia z kartami
+{`// 1. Zwykły tekst / Excel Copy-Paste / CSV (najbardziej wydajny!)
+Hola;Cześć
+Gracias;Dziękuję
+
+// 2. Kompaktowy JSON (tablica tablic)
+[
+  ["Hola", "Cześć"],
+  ["Gracias", "Dziękuję"]
+]
+
+// 3. Pełny JSON talii
 {
   "name": "Hiszpański",
-  "description": "Fiszki",
-  "cards": [
-    { "front": "Hola", "back": "Cześć" }
-  ]
-}
-
-// Opcja 2: Sama tablica fiszek
-[
-  { "front": "Hola", "back": "Cześć" }
-]`}
+  "cards": [{ "front": "Hola", "back": "Cześć" }]
+}`}
                 </pre>
               </div>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Trash2, Plus, AlertCircle, Layers } from 'lucide-react';
 import type { Deck, Card } from '../hooks/useFirestore';
+import { parseImportData } from '../utils/importParser';
 
 interface DeckManageScreenProps {
   deck: Deck;
@@ -64,33 +65,18 @@ export function DeckManageScreen({
     e.preventDefault();
     setImportError(null);
 
-    if (!importJSON.trim()) return;
+    const text = importJSON.trim();
+    if (!text) return;
 
     setIsImporting(true);
     try {
-      const parsed = JSON.parse(importJSON.trim());
-      
-      if (!Array.isArray(parsed)) {
-        throw new Error('JSON musi być tablicą obiektów (np. [ { "front": "...", "back": "..." } ]).');
-      }
-
-      if (parsed.length === 0) {
-        throw new Error('Tablica JSON jest pusta.');
-      }
-
-      // Walidacja fiszek
-      parsed.forEach((card, index) => {
-        if (typeof card !== 'object' || !card.front || !card.back) {
-          throw new Error(`Karta na indeksie ${index} nie posiada kluczy "front" i "back".`);
-        }
-      });
-
-      await onImportCards(parsed);
+      const parsedCards = parseImportData(text);
+      await onImportCards(parsedCards);
       setImportJSON('');
       setShowImportMode(false);
     } catch (err: any) {
       console.error(err);
-      setImportError(err.message || 'Niepoprawny format JSON.');
+      setImportError(err.message || 'Niepoprawny format danych.');
     } finally {
       setIsImporting(false);
     }
@@ -178,11 +164,11 @@ export function DeckManageScreen({
         ) : (
           <form onSubmit={handleImportSubmit}>
             <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.8rem' }}>Wklej tablicę JSON</label>
+              <label className="form-label" style={{ fontSize: '0.8rem' }}>Wklej dane (JSON, CSV, Excel)</label>
               <textarea 
                 className="form-input" 
                 style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
-                placeholder='np. [ {"front": "cat", "back": "kot"} ]'
+                placeholder="Wklej tablicę JSON, dane CSV (rozdzielane ;) lub skopiowane kolumny z Excela..."
                 value={importJSON}
                 onChange={(e) => setImportJSON(e.target.value)}
                 required
@@ -196,17 +182,16 @@ export function DeckManageScreen({
             )}
 
             <div style={{ marginBottom: '16px' }}>
-              <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Wzór poprawnej składni JSON:</span>
+              <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Przykłady wydajnych formatów:</span>
               <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-{`[
-  {
-    "front": "Hello",
-    "back": "Cześć"
-  },
-  {
-    "front": "Goodbye",
-    "back": "Do widzenia"
-  }
+{`// 1. Zwykły tekst / Excel / CSV (Zalecane — najszybsze)
+Hello;Cześć
+Goodbye;Do widzenia
+
+// 2. Kompaktowy JSON (bez powtarzania kluczy)
+[
+  ["Hello", "Cześć"],
+  ["Goodbye", "Do widzenia"]
 ]`}
               </pre>
             </div>
