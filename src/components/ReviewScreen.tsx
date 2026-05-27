@@ -164,8 +164,8 @@ export function ReviewScreen({
   const getOverlayLabel = () => {
     if (keyboardSwipeDirection) {
       if (keyboardSwipeDirection === 'left') return { text: 'Znowu', color: '#ef4444' };
-      if (keyboardSwipeDirection === 'right') return { text: 'Dobrze', color: '#10b981' };
-      if (keyboardSwipeDirection === 'up') return { text: 'Łatwo', color: '#3b82f6' };
+      if (keyboardSwipeDirection === 'right') return { text: 'Dobrze', color: '#3b82f6' };
+      if (keyboardSwipeDirection === 'up') return { text: 'Łatwo', color: '#10b981' };
       if (keyboardSwipeDirection === 'down') return { text: 'Trudno', color: '#f59e0b' };
     }
 
@@ -178,14 +178,14 @@ export function ReviewScreen({
     if (Math.abs(diffX) > Math.abs(diffY)) {
       if (Math.abs(diffX) > threshold) {
         return diffX > 0
-          ? { text: 'Dobrze', color: '#10b981' } // Zielony
-          : { text: 'Znowu', color: '#ef4444' }; // Czerwony
+          ? { text: 'Dobrze', color: '#3b82f6' } // Niebieski (zgodnie z przyciskiem Dobrze)
+          : { text: 'Znowu', color: '#ef4444' }; // Czerwony (zgodnie z przyciskiem Znowu)
       }
     } else {
       if (Math.abs(diffY) > threshold) {
         return diffY > 0
-          ? { text: 'Trudno', color: '#f59e0b' } // Pomarańczowy
-          : { text: 'Łatwo', color: '#3b82f6' }; // Niebieski
+          ? { text: 'Trudno', color: '#f59e0b' } // Pomarańczowy (zgodnie z przyciskiem Trudno)
+          : { text: 'Łatwo', color: '#10b981' }; // Zielony (zgodnie z przyciskiem Łatwo)
       }
     }
     return null;
@@ -427,19 +427,19 @@ export function ReviewScreen({
               <div className="score-buttons-grid">
                 <button className="btn-score btn-again" onClick={() => handleScore(1)}>
                   <strong>Znowu</strong>
-                  <span className="score-label">Reset (⬅️ w lewo)</span>
+                  <span className="score-label">Reset<span className="shortcut-hint"> (⬅️ w lewo)</span></span>
                 </button>
                 <button className="btn-score btn-hard" onClick={() => handleScore(3)}>
                   <strong>Trudno</strong>
-                  <span className="score-label">Trudna (⬇️ w dół)</span>
+                  <span className="score-label">Trudna<span className="shortcut-hint"> (⬇️ w dół)</span></span>
                 </button>
                 <button className="btn-score btn-good" onClick={() => handleScore(4)}>
                   <strong>Dobrze</strong>
-                  <span className="score-label">Średnia (➡️ w prawo)</span>
+                  <span className="score-label">Średnia<span className="shortcut-hint"> (➡️ w prawo)</span></span>
                 </button>
                 <button className="btn-score btn-easy" onClick={() => handleScore(5)}>
                   <strong>Łatwo</strong>
-                  <span className="score-label">Szybka (⬆️ w górę)</span>
+                  <span className="score-label">Szybka<span className="shortcut-hint"> (⬆️ w górę)</span></span>
                 </button>
               </div>
             </div>

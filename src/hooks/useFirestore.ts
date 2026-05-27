@@ -11,7 +11,11 @@ import {
   serverTimestamp, 
   Timestamp,
   increment,
-  writeBatch
+  writeBatch,
+  collectionGroup,
+  getDoc,
+  getDocs,
+  setDoc
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -21,6 +25,8 @@ export interface Deck {
   description: string;
   createdAt: Timestamp | null;
   cardCount: number;
+  ownerId?: string;
+  isShared?: boolean;
 }
 
 export interface Card {
@@ -38,7 +44,7 @@ export function useFirestore(userId: string | undefined) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [loadingDecks, setLoadingDecks] = useState(true);
 
-  // 1. Obserwowanie talii użytkownika w czasie rzeczywistym
+  // 1. Obserwowanie wszystkich talii (własnych i współdzielonych w fazie testowej) w czasie rzeczywistym
   useEffect(() => {
     if (!userId) {
       setDecks([]);
@@ -46,15 +52,39 @@ export function useFirestore(userId: string | undefined) {
       return;
     }
 
-    const decksRef = collection(db, 'users', userId, 'decks');
-    const q = query(decksRef, orderBy('createdAt', 'desc'));
+    // Używamy collectionGroup, by pobrać talie wszystkich użytkowników
+    const decksRef = collectionGroup(db, 'decks');
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const decksList: Deck[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Deck[];
-      setDecks(decksList);
+    const unsubscribe = onSnapshot(decksRef, (snapshot) => {
+      const allDecks = snapshot.docs.map(doc => {
+        const pathParts = doc.ref.path.split('/');
+        const ownerId = pathParts[1];
+        return {
+          id: doc.id,
+          ownerId,
+          isShared: ownerId !== userId,
+          ...doc.data()
+        };
+      }) as Deck[];
+
+      // Filtrujemy duplikaty: jeśli użytkownik ma już sklonowaną talię (własny dokument o tym samym ID),
+      // nie pokazujemy oryginalnej wspólnej wersji
+      const myDeckIds = new Set(allDecks.filter(d => d.ownerId === userId).map(d => d.id));
+      
+      const filteredDecks = allDecks.filter(deck => {
+        if (deck.ownerId === userId) return true;
+        // Pokazuj wspólną talię tylko wtedy, gdy gość/użytkownik nie ma jeszcze jej kopii o tym samym ID
+        return !myDeckIds.has(deck.id);
+      });
+
+      // Sortowanie: najpierw własne, potem wspólne
+      filteredDecks.sort((a, b) => {
+        if (a.isShared && !b.isShared) return 1;
+        if (!a.isShared && b.isShared) return -1;
+        return 0;
+      });
+
+      setDecks(filteredDecks);
       setLoadingDecks(false);
     }, (error) => {
       console.error("Error fetching decks:", error);
@@ -272,6 +302,50 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
+  // Klonowanie wspólnej talii i jej kart do konta zalogowanego użytkownika
+  const cloneSharedDeck = async (sharedOwnerId: string, sharedDeckId: string) => {
+    if (!userId) return;
+    try {
+      // 1. Pobierz dane oryginalnej talii
+      const sharedDeckDoc = await getDoc(doc(db, 'users', sharedOwnerId, 'decks', sharedDeckId));
+      if (!sharedDeckDoc.exists()) return;
+      const deckData = sharedDeckDoc.data();
+
+      // 2. Pobierz wszystkie karty z oryginalnej talii
+      const cardsSnapshot = await getDocs(collection(db, 'users', sharedOwnerId, 'decks', sharedDeckId, 'cards'));
+      
+      // 3. Utwórz talię u aktualnego użytkownika z tym samym ID (aby zapobiec ponownemu klonowaniu)
+      const newDeckRef = doc(db, 'users', userId, 'decks', sharedDeckId);
+      await setDoc(newDeckRef, {
+        name: deckData.name,
+        description: deckData.description || '',
+        createdAt: serverTimestamp(),
+        cardCount: cardsSnapshot.size
+      });
+
+      // 4. Skopiuj karty z domyślnym postępem nauki (SRS zresetowane dla tego użytkownika)
+      const batch = writeBatch(db);
+      const now = new Date();
+      cardsSnapshot.docs.forEach((cardDoc) => {
+        const cardData = cardDoc.data();
+        const newCardRef = doc(collection(db, 'users', userId, 'decks', sharedDeckId, 'cards'));
+        batch.set(newCardRef, {
+          front: cardData.front,
+          back: cardData.back,
+          createdAt: serverTimestamp(),
+          interval: 0,
+          easeFactor: 2.5,
+          repetitions: 0,
+          nextReview: Timestamp.fromDate(now)
+        });
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("Error cloning deck:", error);
+      throw error;
+    }
+  };
+
   return {
     decks,
     loadingDecks,
@@ -282,6 +356,7 @@ export function useFirestore(userId: string | undefined) {
     subscribeToCards,
     scoreCard,
     importDeck,
-    importCards
+    importCards,
+    cloneSharedDeck
   };
 }

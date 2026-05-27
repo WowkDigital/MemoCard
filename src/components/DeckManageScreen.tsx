@@ -125,7 +125,7 @@ export function DeckManageScreen({
 
         {!showImportMode ? (
           <form onSubmit={handleAddCardSubmit}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div className="form-row-grid">
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" style={{ fontSize: '0.8rem' }}>Awers (front)</label>
                 <input 

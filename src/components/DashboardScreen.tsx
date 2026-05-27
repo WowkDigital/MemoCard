@@ -110,7 +110,7 @@ export function DashboardScreen({
           <span>MemoCard</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          <span className="user-email" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             {user.isAnonymous ? 'Konto tymczasowe' : user.email}
           </span>
           <button className="logout-btn" onClick={onLogout} title="Wyloguj się">
@@ -123,7 +123,7 @@ export function DashboardScreen({
       <main style={{ flex: 1 }}>
         <div className="section-title">
           <h2>Twoje Talie</h2>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="section-actions" style={{ display: 'flex', gap: '8px' }}>
             <button 
               className="btn btn-secondary" 
               style={{ width: 'auto', padding: '8px 16px', fontSize: '0.875rem' }}
@@ -157,7 +157,14 @@ export function DashboardScreen({
             {decks.map((deck) => (
               <div key={deck.id} className="deck-card glass">
                 <div className="deck-info">
-                  <span className="deck-name">{deck.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span className="deck-name">{deck.name}</span>
+                    {deck.isShared && (
+                      <span className="card-badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#a5b4fc', fontSize: '0.75rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                        Wspólna
+                      </span>
+                    )}
+                  </div>
                   {deck.description && <span className="deck-desc">{deck.description}</span>}
                 </div>
                 <div className="deck-meta">
@@ -263,7 +270,7 @@ export function DashboardScreen({
             </div>
             
             <form onSubmit={handleImportSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              <div className="form-row-grid">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Nazwa talii</label>
                   <input 

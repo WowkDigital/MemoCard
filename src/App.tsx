@@ -22,11 +22,48 @@ function App() {
     subscribeToCards, 
     scoreCard,
     importDeck,
-    importCards
+    importCards,
+    cloneSharedDeck
   } = useFirestore(user?.uid);
 
   const [screen, setScreen] = useState<Screen>('DASHBOARD');
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
+
+  const handleSelectDeck = async (deck: Deck) => {
+    if (deck.isShared && deck.ownerId) {
+      showToast('Klonowanie wspólnej talii...', 'success');
+      try {
+        await cloneSharedDeck(deck.ownerId, deck.id);
+        const clonedDeck = { ...deck, isShared: false, ownerId: user?.uid };
+        setSelectedDeck(clonedDeck);
+        setScreen('DECK_MANAGE');
+      } catch (err) {
+        console.error(err);
+        showToast('Nie udało się sklonować talii.', 'error');
+      }
+    } else {
+      setSelectedDeck(deck);
+      setScreen('DECK_MANAGE');
+    }
+  };
+
+  const handleStartReview = async (deck: Deck) => {
+    if (deck.isShared && deck.ownerId) {
+      showToast('Przygotowywanie wspólnej talii...', 'success');
+      try {
+        await cloneSharedDeck(deck.ownerId, deck.id);
+        const clonedDeck = { ...deck, isShared: false, ownerId: user?.uid };
+        setSelectedDeck(clonedDeck);
+        setScreen('REVIEW');
+      } catch (err) {
+        console.error(err);
+        showToast('Nie udało się sklonować talii do nauki.', 'error');
+      }
+    } else {
+      setSelectedDeck(deck);
+      setScreen('REVIEW');
+    }
+  };
   
   // Stan notyfikacji Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -132,14 +169,8 @@ function App() {
           loadingDecks={loadingDecks} 
           onAddDeck={handleAddDeck} 
           onImportDeck={handleImportDeck}
-          onSelectDeck={(deck) => {
-            setSelectedDeck(deck);
-            setScreen('DECK_MANAGE');
-          }} 
-          onStartReview={(deck) => {
-            setSelectedDeck(deck);
-            setScreen('REVIEW');
-          }} 
+          onSelectDeck={handleSelectDeck} 
+          onStartReview={handleStartReview} 
           user={user} 
           onLogout={logout} 
         />

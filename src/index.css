@@ -756,3 +756,151 @@ body {
     opacity: 1;
   }
 }
+
+/* --- Mobile Responsiveness and Optimizations --- */
+
+/* Responsive Grid Form Rows */
+.form-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* Ellipsis wrapper for long emails in header */
+.user-email {
+  display: inline-block;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+@media (max-width: 600px) {
+  .shortcut-hint {
+    display: none;
+  }
+  .btn-score {
+    padding: 10px 4px;
+    font-size: 0.8rem;
+  }
+  .score-label {
+    font-size: 0.7rem;
+  }
+  .user-email {
+    max-width: 110px;
+  }
+}
+
+@media (max-width: 540px) {
+  /* Deck cards display stacked to fit all info nicely */
+  .deck-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px;
+  }
+  
+  .deck-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    border-top: 1px solid var(--border-light);
+    padding-top: 12px;
+  }
+  
+  .deck-info {
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Hide designated elements */
+  .mobile-hide {
+    display: none;
+  }
+  
+  /* Containers padding */
+  .container {
+    padding: 16px 12px;
+  }
+  
+  /* Form row stack */
+  .form-row-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  /* Section title and button stacking */
+  .section-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  
+  .section-actions {
+    width: 100%;
+  }
+  
+  .section-actions .btn {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 0.8rem;
+  }
+  
+  /* Study view adjustments for smaller heights */
+  .flashcard-container {
+    height: 230px;
+    margin-bottom: 20px;
+  }
+  
+  .progress-bar-container {
+    margin-bottom: 20px;
+  }
+  
+  .flashcard-face {
+    padding: 24px 16px;
+  }
+  
+  .flashcard-text {
+    font-size: 1.4rem;
+  }
+  
+  /* Action prompt and grid */
+  .review-actions-prompt {
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+  }
+  
+  .score-buttons-grid {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 400px) {
+  /* Modals padding reduction */
+  .modal-content {
+    padding: 20px 16px;
+  }
+  
+  .login-card {
+    padding: 32px 16px;
+  }
+  
+  .login-title {
+    font-size: 1.8rem;
+  }
+  
+  .login-subtitle {
+    font-size: 0.9rem;
+    margin-bottom: 24px;
+  }
+  
+  .btn-score strong {
+    font-size: 0.8rem;
+  }
+}
+
