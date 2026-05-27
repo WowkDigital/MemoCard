@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, CheckCircle, RefreshCw, Eye, Sparkles } from 'lucide-react';
 import type { Deck, Card } from '../hooks/useFirestore';
 
@@ -22,6 +22,130 @@ export function ReviewScreen({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+
+  // Gesty dotykowe na telefonach
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [touchCurrent, setTouchCurrent] = useState<{ x: number; y: number } | null>(null);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const dragOccurred = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // Gesty aktywne tylko gdy karta jest odwrócona (pokazuje odpowiedź)
+    if (!isFlipped) return;
+    
+    const touch = e.touches[0];
+    setTouchStart({ x: touch.clientX, y: touch.clientY });
+    setTouchCurrent({ x: touch.clientX, y: touch.clientY });
+    setIsSwiping(true);
+    dragOccurred.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart || !isSwiping) return;
+    
+    const touch = e.touches[0];
+    setTouchCurrent({ x: touch.clientX, y: touch.clientY });
+
+    const diffX = Math.abs(touch.clientX - touchStart.x);
+    const diffY = Math.abs(touch.clientY - touchStart.y);
+    if (diffX > 10 || diffY > 10) {
+      dragOccurred.current = true;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchCurrent || !isSwiping) {
+      resetSwipeState();
+      return;
+    }
+
+    const diffX = touchCurrent.x - touchStart.x;
+    const diffY = touchCurrent.y - touchStart.y;
+    const threshold = 100; // minimalne przesunięcie w pikselach (zwiększona odporność na fałszywe przesunięcia)
+
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      // Swipe poziomy
+      if (Math.abs(diffX) > threshold) {
+        if (diffX > 0) {
+          handleScore(4); // W prawo -> Dobrze (4)
+        } else {
+          handleScore(1); // W lewo -> Znowu (1)
+        }
+        resetSwipeState();
+        return;
+      }
+    } else {
+      // Swipe pionowy
+      if (Math.abs(diffY) > threshold) {
+        if (diffY > 0) {
+          handleScore(3); // W dół -> Trudno (3)
+        } else {
+          handleScore(5); // W górę -> Łatwo (5)
+        }
+        resetSwipeState();
+        return;
+      }
+    }
+
+    resetSwipeState();
+  };
+
+  const resetSwipeState = () => {
+    setTouchStart(null);
+    setTouchCurrent(null);
+    setIsSwiping(false);
+  };
+
+  const handleCardClick = () => {
+    if (dragOccurred.current) {
+      return; // Zablokuj obrót, jeśli intencją było przesunięcie
+    }
+    setIsFlipped(!isFlipped);
+  };
+
+  const getCardStyle = () => {
+    if (!touchStart || !touchCurrent || !isSwiping) {
+      return {
+        transition: 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+      };
+    }
+
+    const diffX = touchCurrent.x - touchStart.x;
+    const diffY = touchCurrent.y - touchStart.y;
+    const rotate = diffX * 0.08; // Delikatna rotacja przy przesuwaniu
+
+    return {
+      transform: `translate3d(${diffX}px, ${diffY}px, 0) rotate(${rotate}deg)`,
+      transition: 'none',
+      cursor: 'grabbing',
+      touchAction: 'none' // Zapobiega przewijaniu strony na telefonach podczas gestu
+    };
+  };
+
+  const getOverlayLabel = () => {
+    if (!touchStart || !touchCurrent || !isSwiping) return null;
+
+    const diffX = touchCurrent.x - touchStart.x;
+    const diffY = touchCurrent.y - touchStart.y;
+    const threshold = 30; // Próg od którego wyświetlamy etykietę gestu
+
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      if (Math.abs(diffX) > threshold) {
+        return diffX > 0
+          ? { text: 'Dobrze', color: '#10b981' } // Zielony
+          : { text: 'Znowu', color: '#ef4444' }; // Czerwony
+      }
+    } else {
+      if (Math.abs(diffY) > threshold) {
+        return diffY > 0
+          ? { text: 'Trudno', color: '#f59e0b' } // Pomarańczowy
+          : { text: 'Łatwo', color: '#3b82f6' }; // Niebieski
+      }
+    }
+    return null;
+  };
+
+  const overlay = getOverlayLabel();
 
   // Pobranie i filtrowanie kart do powtórki
   useEffect(() => {
@@ -139,8 +263,29 @@ export function ReviewScreen({
           {/* Flashcard Component */}
           <div 
             className={`flashcard-container ${isFlipped ? 'is-flipped' : ''}`}
-            onClick={() => setIsFlipped(!isFlipped)}
+            style={getCardStyle()}
+            onClick={handleCardClick}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
+            {overlay && (
+              <div 
+                className="swipe-overlay-indicator"
+                style={{ 
+                  color: overlay.color, 
+                  borderColor: overlay.color,
+                  backgroundColor: `rgba(${
+                    overlay.color === '#10b981' ? '16,185,129' : 
+                    overlay.color === '#ef4444' ? '239,68,68' : 
+                    overlay.color === '#f59e0b' ? '245,158,11' : 
+                    '59,130,246'
+                  }, 0.15)`
+                }}
+              >
+                {overlay.text}
+              </div>
+            )}
             <div className="flashcard-inner">
               {/* Front Face */}
               <div className="flashcard-face flashcard-front">
