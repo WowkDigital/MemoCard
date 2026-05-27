@@ -23,11 +23,17 @@ export function ReviewScreen({
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
 
+  const currentCard = sessionQueue[currentIndex];
+  const isFinished = !currentCard || currentIndex >= sessionQueue.length;
+
   // Gesty dotykowe na telefonach
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [touchCurrent, setTouchCurrent] = useState<{ x: number; y: number } | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
   const dragOccurred = useRef(false);
+
+  // Sterowanie klawiaturą na desktopie
+  const [keyboardSwipeDirection, setKeyboardSwipeDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     // Gesty aktywne tylko gdy karta jest odwrócona (pokazuje odpowiedź)
@@ -124,6 +130,19 @@ export function ReviewScreen({
   };
 
   const getCardStyle = () => {
+    if (keyboardSwipeDirection) {
+      let transform = '';
+      if (keyboardSwipeDirection === 'left') transform = 'translate3d(-180px, 0, 0) rotate(-12deg)';
+      else if (keyboardSwipeDirection === 'right') transform = 'translate3d(180px, 0, 0) rotate(12deg)';
+      else if (keyboardSwipeDirection === 'up') transform = 'translate3d(0, -180px, 0)';
+      else if (keyboardSwipeDirection === 'down') transform = 'translate3d(0, 180px, 0)';
+
+      return {
+        transform,
+        transition: 'transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+      };
+    }
+
     if (!touchStart || !touchCurrent || !isSwiping) {
       return {
         transition: 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
@@ -143,6 +162,13 @@ export function ReviewScreen({
   };
 
   const getOverlayLabel = () => {
+    if (keyboardSwipeDirection) {
+      if (keyboardSwipeDirection === 'left') return { text: 'Znowu', color: '#ef4444' };
+      if (keyboardSwipeDirection === 'right') return { text: 'Dobrze', color: '#10b981' };
+      if (keyboardSwipeDirection === 'up') return { text: 'Łatwo', color: '#3b82f6' };
+      if (keyboardSwipeDirection === 'down') return { text: 'Trudno', color: '#f59e0b' };
+    }
+
     if (!touchStart || !touchCurrent || !isSwiping) return null;
 
     const diffX = touchCurrent.x - touchStart.x;
@@ -166,6 +192,62 @@ export function ReviewScreen({
   };
 
   const overlay = getOverlayLabel();
+
+  // Bindowanie klawiatury (strzałki na desktopie)
+  useEffect(() => {
+    if (loading || isFinished) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignorujemy skróty, jeśli użytkownik pisze w formularzu
+      const activeElement = document.activeElement as HTMLElement;
+      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+      if (!keys.includes(e.key)) return;
+
+      e.preventDefault();
+
+      if (!isFlipped) {
+        // Pierwsze kliknięcie dowolnej strzałki pokazuje odpowiedź
+        setIsFlipped(true);
+      } else {
+        // Drugie kliknięcie ocenia trudność
+        if (keyboardSwipeDirection) return; // Ochrona przed podwójnym wywołaniem
+
+        let score = 4;
+        let direction: 'left' | 'right' | 'up' | 'down' = 'right';
+
+        if (e.key === 'ArrowLeft') {
+          score = 1;
+          direction = 'left';
+        } else if (e.key === 'ArrowRight') {
+          score = 4;
+          direction = 'right';
+        } else if (e.key === 'ArrowUp') {
+          score = 5;
+          direction = 'up';
+        } else if (e.key === 'ArrowDown') {
+          score = 3;
+          direction = 'down';
+        }
+
+        setKeyboardSwipeDirection(direction);
+
+        // Wywołujemy ocenę po krótkiej animacji wysunięcia
+        setTimeout(() => {
+          handleScore(score);
+          setKeyboardSwipeDirection(null);
+        }, 200);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFlipped, currentIndex, loading, isFinished, keyboardSwipeDirection]);
 
   // Pobranie i filtrowanie kart do powtórki
   useEffect(() => {
@@ -192,8 +274,6 @@ export function ReviewScreen({
 
     return unsubscribe;
   }, [deck.id, subscribeToCards, loading]);
-
-  const currentCard = sessionQueue[currentIndex];
 
   const handleScore = async (quality: number) => {
     if (!currentCard) return;
@@ -237,7 +317,7 @@ export function ReviewScreen({
   }
 
   // Stan zakończenia sesji
-  const isFinished = !currentCard || currentIndex >= sessionQueue.length;
+
 
   return (
     <div 
