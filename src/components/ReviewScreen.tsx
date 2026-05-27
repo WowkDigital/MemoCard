@@ -72,6 +72,9 @@ export function ReviewScreen({
           handleScore(1); // W lewo -> Znowu (1)
         }
         resetSwipeState();
+        setTimeout(() => {
+          dragOccurred.current = false;
+        }, 50);
         return;
       }
     } else {
@@ -83,11 +86,17 @@ export function ReviewScreen({
           handleScore(5); // W górę -> Łatwo (5)
         }
         resetSwipeState();
+        setTimeout(() => {
+          dragOccurred.current = false;
+        }, 50);
         return;
       }
     }
 
     resetSwipeState();
+    setTimeout(() => {
+      dragOccurred.current = false;
+    }, 50);
   };
 
   const resetSwipeState = () => {
@@ -101,6 +110,17 @@ export function ReviewScreen({
       return; // Zablokuj obrót, jeśli intencją było przesunięcie
     }
     setIsFlipped(!isFlipped);
+  };
+
+  const handleContainerClick = (e: React.MouseEvent) => {
+    // Jeśli karta jest już odwrócona, ignorujemy kliknięcia na tło
+    if (isFlipped) return;
+    
+    // Ignoruj kliknięcia w przyciski sterujące
+    const target = e.target as HTMLElement;
+    if (target.closest('.back-link') || target.closest('.btn-secondary') || target.closest('.btn-primary')) return;
+
+    setIsFlipped(true);
   };
 
   const getCardStyle = () => {
@@ -178,6 +198,9 @@ export function ReviewScreen({
   const handleScore = async (quality: number) => {
     if (!currentCard) return;
 
+    // Bezwarunkowe zresetowanie stanu przeciągania przy ocenie
+    dragOccurred.current = false;
+
     // Przekazanie oceny do bazy danych
     await scoreCard(deck.id, currentCard.id, currentCard, quality);
 
@@ -217,10 +240,14 @@ export function ReviewScreen({
   const isFinished = !currentCard || currentIndex >= sessionQueue.length;
 
   return (
-    <div className="container">
+    <div 
+      className="container"
+      onClick={handleContainerClick}
+      style={{ cursor: !isFlipped ? 'pointer' : 'default', minHeight: '100vh' }}
+    >
       {/* Navigation */}
       <div className="navigation-bar">
-        <button className="back-link" onClick={onBack}>
+        <button className="back-link" onClick={(e) => { e.stopPropagation(); onBack(); }}>
           <ArrowLeft size={16} />
           <span>Zakończ sesję</span>
         </button>
@@ -292,7 +319,7 @@ export function ReviewScreen({
                 <span className="flashcard-side-label">Pytanie / Awers</span>
                 <span className="flashcard-text">{currentCard.front}</span>
                 <span className="flashcard-hint">
-                  <Eye size={14} /> Kliknij kartę, aby zobaczyć odpowiedź
+                  <Eye size={14} /> Kliknij gdziekolwiek, aby zobaczyć odpowiedź
                 </span>
               </div>
               
@@ -301,7 +328,7 @@ export function ReviewScreen({
                 <span className="flashcard-side-label">Odpowiedź / Rewers</span>
                 <span className="flashcard-text">{currentCard.back}</span>
                 <span className="flashcard-hint">
-                  <Sparkles size={14} /> Wybierz poziom trudności poniżej
+                  <Sparkles size={14} /> Wybierz poziom poniżej lub przesuń palcem (⬅️/⬇️/➡️/⬆️)
                 </span>
               </div>
             </div>
@@ -310,7 +337,7 @@ export function ReviewScreen({
           {/* Action Grid */}
           {!isFlipped ? (
             <div className="review-actions-prompt">
-              Kliknij fiszkę powyżej, aby zobaczyć drugą stronę.
+              Kliknij w dowolnym miejscu na ekranie, aby pokazać odpowiedź.
             </div>
           ) : (
             <div className="animate-fade-in">
@@ -320,19 +347,19 @@ export function ReviewScreen({
               <div className="score-buttons-grid">
                 <button className="btn-score btn-again" onClick={() => handleScore(1)}>
                   <strong>Znowu</strong>
-                  <span className="score-label">Reset</span>
+                  <span className="score-label">Reset (⬅️ w lewo)</span>
                 </button>
                 <button className="btn-score btn-hard" onClick={() => handleScore(3)}>
                   <strong>Trudno</strong>
-                  <span className="score-label">Trudna</span>
+                  <span className="score-label">Trudna (⬇️ w dół)</span>
                 </button>
                 <button className="btn-score btn-good" onClick={() => handleScore(4)}>
                   <strong>Dobrze</strong>
-                  <span className="score-label">Średnia</span>
+                  <span className="score-label">Średnia (➡️ w prawo)</span>
                 </button>
                 <button className="btn-score btn-easy" onClick={() => handleScore(5)}>
                   <strong>Łatwo</strong>
-                  <span className="score-label">Szybka</span>
+                  <span className="score-label">Szybka (⬆️ w górę)</span>
                 </button>
               </div>
             </div>
