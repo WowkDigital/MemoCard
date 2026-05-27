@@ -6,6 +6,7 @@ interface DeckManageScreenProps {
   deck: Deck;
   onBack: () => void;
   onAddCard: (front: string, back: string) => Promise<void>;
+  onImportCards: (cardsList: { front: string; back: string }[]) => Promise<void>;
   onDeleteCard: (cardId: string) => Promise<void>;
   onDeleteDeck: () => Promise<void>;
   subscribeToCards: (deckId: string, callback: (cards: Card[]) => void) => () => void;
@@ -15,6 +16,7 @@ export function DeckManageScreen({
   deck,
   onBack,
   onAddCard,
+  onImportCards,
   onDeleteCard,
   onDeleteDeck,
   subscribeToCards
@@ -26,6 +28,12 @@ export function DeckManageScreen({
   const [back, setBack] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [showConfirmDeleteDeck, setShowConfirmDeleteDeck] = useState(false);
+
+  // Stan importu JSON
+  const [showImportMode, setShowImportMode] = useState(false);
+  const [importJSON, setImportJSON] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Zapis do subskrypcji kart
   useEffect(() => {
@@ -49,6 +57,42 @@ export function DeckManageScreen({
       console.error(err);
     } finally {
       setIsAdding(false);
+    }
+  };
+
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setImportError(null);
+
+    if (!importJSON.trim()) return;
+
+    setIsImporting(true);
+    try {
+      const parsed = JSON.parse(importJSON.trim());
+      
+      if (!Array.isArray(parsed)) {
+        throw new Error('JSON musi być tablicą obiektów (np. [ { "front": "...", "back": "..." } ]).');
+      }
+
+      if (parsed.length === 0) {
+        throw new Error('Tablica JSON jest pusta.');
+      }
+
+      // Walidacja fiszek
+      parsed.forEach((card, index) => {
+        if (typeof card !== 'object' || !card.front || !card.back) {
+          throw new Error(`Karta na indeksie ${index} nie posiada kluczy "front" i "back".`);
+        }
+      });
+
+      await onImportCards(parsed);
+      setImportJSON('');
+      setShowImportMode(false);
+    } catch (err: any) {
+      console.error(err);
+      setImportError(err.message || 'Niepoprawny format JSON.');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -77,44 +121,106 @@ export function DeckManageScreen({
 
       {/* Add Card Form */}
       <div className="glass" style={{ padding: '20px', marginBottom: '24px' }}>
-        <h3 style={{ marginBottom: '16px', fontWeight: 600, fontSize: '1.1rem' }}>Dodaj nową fiszkę</h3>
-        <form onSubmit={handleAddCardSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.8rem' }}>Awers (front)</label>
-              <input 
-                type="text" 
-                className="form-input" 
-                placeholder="np. Hello" 
-                value={front}
-                onChange={(e) => setFront(e.target.value)}
-                required
-                maxLength={100}
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.8rem' }}>Rewers (back)</label>
-              <input 
-                type="text" 
-                className="form-input" 
-                placeholder="np. Cześć" 
-                value={back}
-                onChange={(e) => setBack(e.target.value)}
-                required
-                maxLength={100}
-              />
-            </div>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.1rem' }}>
+            {showImportMode ? 'Importuj fiszki z JSON' : 'Dodaj nową fiszkę'}
+          </h3>
           <button 
-            type="submit" 
-            className="btn btn-primary" 
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-            disabled={isAdding}
+            className="btn btn-secondary" 
+            style={{ width: 'auto', padding: '4px 12px', fontSize: '0.8rem' }}
+            onClick={() => {
+              setShowImportMode(!showImportMode);
+              setImportError(null);
+            }}
           >
-            <Plus size={16} />
-            {isAdding ? 'Dodawanie...' : 'Dodaj Fiszkę'}
+            {showImportMode ? 'Ręczne dodawanie' : 'Importuj z JSON'}
           </button>
-        </form>
+        </div>
+
+        {!showImportMode ? (
+          <form onSubmit={handleAddCardSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Awers (front)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="np. Hello" 
+                  value={front}
+                  onChange={(e) => setFront(e.target.value)}
+                  required
+                  maxLength={100}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Rewers (back)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="np. Cześć" 
+                  value={back}
+                  onChange={(e) => setBack(e.target.value)}
+                  required
+                  maxLength={100}
+                />
+              </div>
+            </div>
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              disabled={isAdding}
+            >
+              <Plus size={16} />
+              {isAdding ? 'Dodawanie...' : 'Dodaj Fiszkę'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleImportSubmit}>
+            <div className="form-group">
+              <label className="form-label" style={{ fontSize: '0.8rem' }}>Wklej tablicę JSON</label>
+              <textarea 
+                className="form-input" 
+                style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
+                placeholder='np. [ {"front": "cat", "back": "kot"} ]'
+                value={importJSON}
+                onChange={(e) => setImportJSON(e.target.value)}
+                required
+              />
+            </div>
+
+            {importError && (
+              <div style={{ color: 'var(--color-again)', fontSize: '0.85rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>⚠️ {importError}</span>
+              </div>
+            )}
+
+            <div style={{ marginBottom: '16px' }}>
+              <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Wzór poprawnej składni JSON:</span>
+              <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
+{`[
+  {
+    "front": "Hello",
+    "back": "Cześć"
+  },
+  {
+    "front": "Goodbye",
+    "back": "Do widzenia"
+  }
+]`}
+              </pre>
+            </div>
+
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              disabled={isImporting}
+            >
+              {isImporting ? 'Importowanie...' : 'Rozpocznij import'}
+            </button>
+          </form>
+        )}
       </div>
 
       {/* Cards List Section */}

@@ -20,7 +20,9 @@ function App() {
     addCard, 
     deleteCard, 
     subscribeToCards, 
-    scoreCard 
+    scoreCard,
+    importDeck,
+    importCards
   } = useFirestore(user?.uid);
 
   const [screen, setScreen] = useState<Screen>('DASHBOARD');
@@ -40,6 +42,17 @@ function App() {
     } catch (err) {
       console.error(err);
       showToast('Nie udało się utworzyć talii.', 'error');
+    }
+  };
+
+  const handleImportDeck = async (name: string, description: string, cardsList: { front: string; back: string }[]) => {
+    try {
+      await importDeck(name, description, cardsList);
+      showToast('Zaimportowano nową talię z fiszkami!', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Błąd importowania talii.', 'error');
+      throw err;
     }
   };
 
@@ -64,6 +77,18 @@ function App() {
     } catch (err) {
       console.error(err);
       showToast('Nie udało się dodać fiszki.', 'error');
+    }
+  };
+
+  const handleImportCards = async (cardsList: { front: string; back: string }[]) => {
+    if (!selectedDeck) return;
+    try {
+      await importCards(selectedDeck.id, cardsList);
+      showToast(`Zaimportowano ${cardsList.length} fiszek!`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Błąd importowania fiszek.', 'error');
+      throw err;
     }
   };
 
@@ -106,6 +131,7 @@ function App() {
           decks={decks} 
           loadingDecks={loadingDecks} 
           onAddDeck={handleAddDeck} 
+          onImportDeck={handleImportDeck}
           onSelectDeck={(deck) => {
             setSelectedDeck(deck);
             setScreen('DECK_MANAGE');
@@ -127,6 +153,7 @@ function App() {
             setSelectedDeck(null);
           }} 
           onAddCard={handleAddCard} 
+          onImportCards={handleImportCards}
           onDeleteCard={handleDeleteCard} 
           onDeleteDeck={handleDeleteDeck} 
           subscribeToCards={subscribeToCards} 

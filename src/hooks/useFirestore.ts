@@ -10,7 +10,8 @@ import {
   orderBy, 
   serverTimestamp, 
   Timestamp,
-  increment
+  increment,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -204,6 +205,73 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
+  // Importowanie całej talii wraz z kartami
+  const importDeck = async (name: string, description: string, cardsList: { front: string; back: string }[]) => {
+    if (!userId) return;
+    try {
+      const decksRef = collection(db, 'users', userId, 'decks');
+      const deckDocRef = await addDoc(decksRef, {
+        name,
+        description,
+        createdAt: serverTimestamp(),
+        cardCount: cardsList.length
+      });
+
+      const batch = writeBatch(db);
+      const now = new Date();
+
+      cardsList.forEach((card) => {
+        const cardRef = doc(collection(db, 'users', userId, 'decks', deckDocRef.id, 'cards'));
+        batch.set(cardRef, {
+          front: card.front,
+          back: card.back,
+          createdAt: serverTimestamp(),
+          interval: 0,
+          easeFactor: 2.5,
+          repetitions: 0,
+          nextReview: Timestamp.fromDate(now)
+        });
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error("Error importing deck:", error);
+      throw error;
+    }
+  };
+
+  // Importowanie kart do istniejącej talii
+  const importCards = async (deckId: string, cardsList: { front: string; back: string }[]) => {
+    if (!userId) return;
+    try {
+      const batch = writeBatch(db);
+      const now = new Date();
+
+      cardsList.forEach((card) => {
+        const cardRef = doc(collection(db, 'users', userId, 'decks', deckId, 'cards'));
+        batch.set(cardRef, {
+          front: card.front,
+          back: card.back,
+          createdAt: serverTimestamp(),
+          interval: 0,
+          easeFactor: 2.5,
+          repetitions: 0,
+          nextReview: Timestamp.fromDate(now)
+        });
+      });
+
+      const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
+      batch.update(deckDocRef, {
+        cardCount: increment(cardsList.length)
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error("Error importing cards:", error);
+      throw error;
+    }
+  };
+
   return {
     decks,
     loadingDecks,
@@ -212,6 +280,8 @@ export function useFirestore(userId: string | undefined) {
     addCard,
     deleteCard,
     subscribeToCards,
-    scoreCard
+    scoreCard,
+    importDeck,
+    importCards
   };
 }

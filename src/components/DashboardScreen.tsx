@@ -7,6 +7,7 @@ interface DashboardScreenProps {
   decks: Deck[];
   loadingDecks: boolean;
   onAddDeck: (name: string, description: string) => Promise<void>;
+  onImportDeck: (name: string, description: string, cardsList: { front: string; back: string }[]) => Promise<void>;
   onSelectDeck: (deck: Deck) => void;
   onStartReview: (deck: Deck) => void;
   user: User;
@@ -17,6 +18,7 @@ export function DashboardScreen({
   decks,
   loadingDecks,
   onAddDeck,
+  onImportDeck,
   onSelectDeck,
   onStartReview,
   user,
@@ -26,6 +28,14 @@ export function DashboardScreen({
   const [newDeckName, setNewDeckName] = useState('');
   const [newDeckDesc, setNewDeckDesc] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Stan importu JSON
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importName, setImportName] = useState('');
+  const [importDesc, setImportDesc] = useState('');
+  const [importJSON, setImportJSON] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +51,66 @@ export function DashboardScreen({
       console.error(err);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setImportError(null);
+    
+    if (!importJSON.trim()) {
+      setImportError('Wklej kod JSON.');
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const parsed = JSON.parse(importJSON.trim());
+      
+      let finalName = importName.trim();
+      let finalDesc = importDesc.trim();
+      let cardsList: { front: string; back: string }[] = [];
+
+      // Sprawdzenie struktury JSON (czy cały obiekt talii, czy tablica)
+      if (Array.isArray(parsed)) {
+        cardsList = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        if (parsed.name) finalName = parsed.name;
+        if (parsed.description) finalDesc = parsed.description;
+        if (Array.isArray(parsed.cards)) {
+          cardsList = parsed.cards;
+        } else {
+          throw new Error('Obiekt JSON musi zawierać tablicę "cards".');
+        }
+      } else {
+        throw new Error('JSON musi być tablicą fiszek lub obiektem talii.');
+      }
+
+      // Walidacja kart
+      if (cardsList.length === 0) {
+        throw new Error('Brak fiszek do zaimportowania.');
+      }
+
+      cardsList.forEach((card, index) => {
+        if (typeof card !== 'object' || !card.front || !card.back) {
+          throw new Error(`Karta na indeksie ${index} nie posiada wymaganych pól "front" i "back".`);
+        }
+      });
+
+      if (!finalName) {
+        throw new Error('Musisz podać nazwę talii.');
+      }
+
+      await onImportDeck(finalName, finalDesc, cardsList);
+      setImportJSON('');
+      setImportName('');
+      setImportDesc('');
+      setShowImportModal(false);
+    } catch (err: any) {
+      console.error(err);
+      setImportError(err.message || 'Niepoprawny format JSON.');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -66,14 +136,23 @@ export function DashboardScreen({
       <main style={{ flex: 1 }}>
         <div className="section-title">
           <h2>Twoje Talie</h2>
-          <button 
-            className="btn btn-primary" 
-            style={{ width: 'auto', padding: '8px 16px', fontSize: '0.875rem' }}
-            onClick={() => setShowAddModal(true)}
-          >
-            <Plus size={16} />
-            Nowa Talia
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ width: 'auto', padding: '8px 16px', fontSize: '0.875rem' }}
+              onClick={() => setShowImportModal(true)}
+            >
+              Importuj z JSON
+            </button>
+            <button 
+              className="btn btn-primary" 
+              style={{ width: 'auto', padding: '8px 16px', fontSize: '0.875rem' }}
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus size={16} />
+              Nowa Talia
+            </button>
+          </div>
         </div>
 
         {loadingDecks ? (
@@ -178,6 +257,103 @@ export function DashboardScreen({
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? 'Tworzenie...' : 'Stwórz'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Import Deck Modal */}
+      {showImportModal && (
+        <div className="modal-overlay">
+          <div className="modal-content glass animate-fade-in" style={{ maxWidth: '520px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Importuj talię z JSON</h3>
+              <button className="close-btn" onClick={() => setShowImportModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleImportSubmit}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Nazwa talii</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Wpisz jeśli brak w JSON" 
+                    value={importName}
+                    onChange={(e) => setImportName(e.target.value)}
+                    maxLength={50}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Opis talii</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Wpisz jeśli brak w JSON" 
+                    value={importDesc}
+                    onChange={(e) => setImportDesc(e.target.value)}
+                    maxLength={100}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Wklej JSON</label>
+                <textarea 
+                  className="form-input" 
+                  style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
+                  placeholder='Wklej tablicę kart lub obiekt talii...'
+                  value={importJSON}
+                  onChange={(e) => setImportJSON(e.target.value)}
+                  required
+                />
+              </div>
+
+              {importError && (
+                <div style={{ color: 'var(--color-again)', fontSize: '0.85rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>⚠️ {importError}</span>
+                </div>
+              )}
+
+              <div style={{ marginBottom: '16px' }}>
+                <span className="form-label" style={{ marginBottom: '4px' }}>Dozwolone schematy JSON:</span>
+                <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
+{`// Opcja 1: Pełna talia z kartami
+{
+  "name": "Hiszpański",
+  "description": "Fiszki",
+  "cards": [
+    { "front": "Hola", "back": "Cześć" }
+  ]
+}
+
+// Opcja 2: Sama tablica fiszek
+[
+  { "front": "Hola", "back": "Cześć" }
+]`}
+                </pre>
+              </div>
+
+              <div className="form-actions">
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ width: 'auto' }}
+                  onClick={() => setShowImportModal(false)}
+                >
+                  Anuluj
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  style={{ width: 'auto' }}
+                  disabled={isImporting}
+                >
+                  {isImporting ? 'Importowanie...' : 'Importuj'}
                 </button>
               </div>
             </form>
