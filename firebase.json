@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firebase_rules.txt"
+  },
   "hosting": {
     "public": "dist",
     "ignore": [

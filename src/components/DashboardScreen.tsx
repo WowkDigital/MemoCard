@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, User as UserIcon } from 'lucide-react';
 import type { Deck } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
@@ -27,6 +27,19 @@ export function DashboardScreen({
   user,
   onLogout
 }: DashboardScreenProps) {
+  useEffect(() => {
+    if ((window as any).WowkDigitalFooter) {
+      (window as any).WowkDigitalFooter.init({
+        siteName: 'MemoCard',
+        container: '#wowk-footer-container',
+        brandName: 'Wowk Digital',
+        brandUrl: 'https://github.com/WowkDigital',
+        showHubLink: true,
+        hubUrl: 'https://wowkdigital.github.io/WD_HUB/'
+      });
+    }
+  }, []);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDeckName, setNewDeckName] = useState('');
   const [newDeckDesc, setNewDeckDesc] = useState('');
@@ -114,12 +127,11 @@ export function DashboardScreen({
             className="app-version" 
             style={{ 
               fontSize: '0.7rem', 
-              color: 'var(--text-secondary)', 
-              opacity: 0.6,
-              background: 'rgba(255, 255, 255, 0.05)', 
+              color: 'var(--text-primary)', 
+              background: 'rgba(99, 102, 241, 0.15)', 
               padding: '2px 6px', 
               borderRadius: '4px',
-              border: '1px solid var(--border-light)',
+              border: '1px solid rgba(99, 102, 241, 0.3)',
               fontWeight: 500
             }}
           >
@@ -230,6 +242,9 @@ export function DashboardScreen({
           </div>
         )}
       </main>
+
+      {/* Footer Container */}
+      <div id="wowk-footer-container" style={{ width: '100%', marginTop: 'auto' }}></div>
 
       {/* Add Deck Modal */}
       {showAddModal && (

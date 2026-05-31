@@ -45,6 +45,20 @@ export function DeckManageScreen({
     return unsubscribe;
   }, [deck.id, subscribeToCards]);
 
+  // Initialize footer
+  useEffect(() => {
+    if ((window as any).WowkDigitalFooter) {
+      (window as any).WowkDigitalFooter.init({
+        siteName: 'MemoCard',
+        container: '#wowk-footer-container',
+        brandName: 'Wowk Digital',
+        brandUrl: 'https://github.com/WowkDigital',
+        showHubLink: true,
+        hubUrl: 'https://wowkdigital.github.io/WD_HUB/'
+      });
+    }
+  }, []);
+
   const handleAddCardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!front.trim() || !back.trim()) return;
@@ -279,6 +293,9 @@ Goodbye;Do widzenia
           </div>
         )}
       </div>
+
+      {/* Footer Container */}
+      <div id="wowk-footer-container" style={{ width: '100%', marginTop: 'auto' }}></div>
     </div>
   );
 }
