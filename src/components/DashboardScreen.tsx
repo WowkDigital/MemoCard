@@ -25,6 +25,14 @@ export function DashboardScreen({
   const { decks, loadingDecks, addDeck, importDeck, cloneSharedDeck, subscribeToCards } = useFirestore(user.uid);
   
   const [deckStats, setDeckStats] = useState<Record<string, { total: number; due: number; mastered: number; ease: string }>>({});
+  const [expandedDecks, setExpandedDecks] = useState<Record<string, boolean>>({});
+
+  const toggleDeckExpand = (deckId: string) => {
+    setExpandedDecks(prev => ({
+      ...prev,
+      [deckId]: !prev[deckId]
+    }));
+  };
 
   useEffect(() => {
     if (loadingDecks || decks.length === 0) return;
@@ -348,106 +356,148 @@ export function DashboardScreen({
           </div>
         ) : (
           <div className="deck-list">
-            {decks.map((deck) => (
-              <div 
-                key={deck.id} 
-                className="deck-card glass" 
-                onClick={() => handleSelectDeckClick(deck)}
-                style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}
-              >
-                <div className="deck-info" style={{ flex: 1, minWidth: 0, gap: '2px' }}>
-                  {/* Row 1: Title */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                    <span className="deck-name" style={{ 
-                      whiteSpace: 'nowrap', 
-                      overflow: 'hidden', 
-                      textOverflow: 'ellipsis',
-                      fontSize: '1.05rem',
-                      lineHeight: '1.2'
-                    }}>{deck.name}</span>
-                    {deck.isShared && (
-                      <span className="card-badge" style={{ 
-                        background: 'rgba(99, 102, 241, 0.1)', 
-                        color: '#a5b4fc', 
-                        fontSize: '0.7rem', 
-                        border: '1px solid rgba(99, 102, 241, 0.2)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        Shared
-                      </span>
+            {decks.map((deck) => {
+              const isExpanded = !!expandedDecks[deck.id];
+              return (
+                <div 
+                  key={deck.id} 
+                  className="deck-card glass" 
+                  onClick={() => toggleDeckExpand(deck.id)}
+                  style={{ 
+                    padding: '12px 16px', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '10px',
+                    alignItems: 'stretch',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div className="deck-info" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left', minWidth: 0 }}>
+                    {/* Row 1: Title */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, width: '100%' }}>
+                      <span className="deck-name" style={{ 
+                        fontSize: '1.05rem',
+                        lineHeight: '1.2',
+                        fontWeight: 600,
+                        flex: 1,
+                        minWidth: 0,
+                        ...(isExpanded ? {
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                        } : {
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        })
+                      }}>{deck.name}</span>
+                      {deck.isShared && (
+                        <span className="card-badge" style={{ 
+                          background: 'rgba(99, 102, 241, 0.1)', 
+                          color: '#a5b4fc', 
+                          fontSize: '0.7rem', 
+                          border: '1px solid rgba(99, 102, 241, 0.2)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0
+                        }}>
+                          Shared
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Row 2: Description */}
+                    {deck.description && (
+                      <span className="deck-desc" style={{ 
+                        fontSize: '0.8rem',
+                        lineHeight: '1.3',
+                        color: 'var(--text-secondary)',
+                        width: '100%',
+                        ...(isExpanded ? {
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                        } : {
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        })
+                      }}>{deck.description}</span>
                     )}
                   </div>
                   
-                  {/* Row 2: Description */}
-                  {deck.description && (
-                    <span className="deck-desc" style={{ 
-                      whiteSpace: 'nowrap', 
-                      overflow: 'hidden', 
-                      textOverflow: 'ellipsis',
-                      fontSize: '0.8rem',
-                      lineHeight: '1.2',
-                      color: 'var(--text-secondary)'
-                    }}>{deck.description}</span>
-                  )}
-                  
-                  {/* Row 3: Parameters "30/1/0/2.47" */}
+                  {/* Bottom Row: Stats and Action Buttons */}
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    gap: '4px', 
-                    fontSize: '0.8rem', 
-                    color: 'var(--text-muted)',
-                    marginTop: '2px',
-                    lineHeight: '1'
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    width: '100%'
                   }}>
-                    <strong style={{ color: 'var(--primary)' }}>{deckStats[deck.id]?.total ?? deck.cardCount}</strong>
-                    <span style={{ opacity: 0.3 }}>/</span>
-                    <strong style={{ color: (deckStats[deck.id]?.due ?? 0) > 0 ? 'var(--color-again)' : 'var(--text-muted)' }}>{deckStats[deck.id]?.due ?? 0}</strong>
-                    <span style={{ opacity: 0.3 }}>/</span>
-                    <strong style={{ color: 'var(--color-easy)' }}>{deckStats[deck.id]?.mastered ?? 0}</strong>
-                    <span style={{ opacity: 0.3 }}>/</span>
-                    <strong style={{ color: '#c084fc' }}>{deckStats[deck.id]?.ease ?? '2.50'}</strong>
-                    {deck.createdAt && (
-                      <>
-                        <span style={{ opacity: 0.3, marginLeft: '4px', marginRight: '4px' }}>•</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {/* Row 3: Parameters "30/1/0/2.47" */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      flexWrap: 'wrap',
+                      gap: '4px', 
+                      fontSize: '0.8rem', 
+                      color: 'var(--text-muted)',
+                      lineHeight: '1',
+                      minWidth: 0
+                    }}>
+                      <strong style={{ color: 'var(--primary)' }}>{deckStats[deck.id]?.total ?? deck.cardCount}</strong>
+                      <span style={{ opacity: 0.3 }}>/</span>
+                      <strong style={{ color: (deckStats[deck.id]?.due ?? 0) > 0 ? 'var(--color-again)' : 'var(--text-muted)' }}>{deckStats[deck.id]?.due ?? 0}</strong>
+                      <span style={{ opacity: 0.3 }}>/</span>
+                      <strong style={{ color: 'var(--color-easy)' }}>{deckStats[deck.id]?.mastered ?? 0}</strong>
+                      <span style={{ opacity: 0.3 }}>/</span>
+                      <strong style={{ color: '#c084fc' }}>{deckStats[deck.id]?.ease ?? '2.50'}</strong>
+                      {deck.createdAt && (
+                        <span style={{ 
+                          fontSize: '0.75rem', 
+                          color: 'var(--text-muted)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          minWidth: 0
+                        }}>
+                          <span style={{ opacity: 0.3, marginLeft: '4px', marginRight: '4px' }}>•</span>
                           Created: {getDeckCreationDateStr(deck)}
                         </span>
-                      </>
-                    )}
+                      )}
+                    </div>
+                    
+                    {/* Action buttons (only icons, no text labels) */}
+                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectDeckClick(deck);
+                        }}
+                        title="Manage cards"
+                      >
+                        <Settings size={14} />
+                      </button>
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartReviewClick(deck);
+                        }}
+                        disabled={(deckStats[deck.id]?.total ?? deck.cardCount) === 0}
+                        title={(deckStats[deck.id]?.total ?? deck.cardCount) === 0 ? "No cards to study" : "Start studying"}
+                      >
+                        <BookOpen size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-                
-                {/* Action buttons (only icons, no text labels) */}
-                <div style={{ display: 'flex', gap: '8px', flexShrink: 0, marginLeft: '12px' }}>
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSelectDeckClick(deck);
-                    }}
-                    title="Manage cards"
-                  >
-                    <Settings size={14} />
-                  </button>
-                  <button 
-                    className="btn btn-primary" 
-                    style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleStartReviewClick(deck);
-                    }}
-                    disabled={(deckStats[deck.id]?.total ?? deck.cardCount) === 0}
-                    title={(deckStats[deck.id]?.total ?? deck.cardCount) === 0 ? "No cards to study" : "Start studying"}
-                  >
-                    <BookOpen size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>

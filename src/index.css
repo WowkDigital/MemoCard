@@ -266,12 +266,13 @@ body {
 }
 
 .deck-card {
-  padding: 20px;
+  padding: 12px 16px;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
 }
 
 .deck-card:hover {
@@ -284,6 +285,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  width: 100%;
+  text-align: left;
+  min-width: 0;
 }
 
 .deck-name {
