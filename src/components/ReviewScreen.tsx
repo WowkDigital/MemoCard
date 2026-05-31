@@ -34,15 +34,16 @@ export function ReviewScreen({
   const frontToShow = displayedFront || currentCard?.front || '';
   const backToShow = displayedBack || currentCard?.back || '';
 
-  // Synchronize the displayed texts when the active card or flip state changes
+  // Synchronize the displayed texts when the active card changes.
+  // We exclude `isFlipped` from dependencies to ensure we do not overwrite the
+  // preloaded next card's front text during the transition.
   useEffect(() => {
     if (currentCard) {
-      if (!isFlipped) {
-        setDisplayedFront(currentCard.front);
-        setDisplayedBack(currentCard.back);
-      }
+      setDisplayedFront(currentCard.front);
+      setDisplayedBack(currentCard.back);
     }
-  }, [currentCard, isFlipped]);
+  }, [currentCard]);
+
 
   // Touch gestures for mobile
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, User as UserIcon } from 'lucide-react';
+import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon } from 'lucide-react';
 import type { Deck } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
 import { parseImportData } from '../utils/importParser';
@@ -39,6 +39,33 @@ export function DashboardScreen({
       });
     }
   }, []);
+
+  const forceUpdateApp = async () => {
+    // Unregister service workers
+    if ('serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      } catch (e) {
+        console.error('Error unregistering service worker:', e);
+      }
+    }
+    // Clear caches
+    if ('caches' in window) {
+      try {
+        const keys = await caches.keys();
+        for (const key of keys) {
+          await caches.delete(key);
+        }
+      } catch (e) {
+        console.error('Error clearing cache:', e);
+      }
+    }
+    // Force reload from server bypassing cache
+    window.location.reload();
+  };
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDeckName, setNewDeckName] = useState('');
@@ -123,8 +150,10 @@ export function DashboardScreen({
         <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Layers size={24} style={{ color: 'var(--primary)' }} />
           <span>MemoCard</span>
-          <span 
+          <button 
             className="app-version" 
+            onClick={forceUpdateApp}
+            title="Force reload & check for update"
             style={{ 
               fontSize: '0.7rem', 
               color: 'var(--text-primary)', 
@@ -132,11 +161,25 @@ export function DashboardScreen({
               padding: '2px 6px', 
               borderRadius: '4px',
               border: '1px solid rgba(99, 102, 241, 0.3)',
-              fontWeight: 500
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(99, 102, 241, 0.3)';
+              e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.6)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)';
+              e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
             }}
           >
             v{__APP_VERSION__}
-          </span>
+            <RefreshCw size={10} style={{ color: 'var(--text-secondary)' }} />
+          </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div 
