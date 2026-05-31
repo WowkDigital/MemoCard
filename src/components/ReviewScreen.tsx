@@ -23,8 +23,26 @@ export function ReviewScreen({
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
 
+  // States to hold the text of the card front and back faces currently visible to the user.
+  // This prevents visual glitches/flashing of text when transitioning between cards.
+  const [displayedFront, setDisplayedFront] = useState('');
+  const [displayedBack, setDisplayedBack] = useState('');
+
   const currentCard = sessionQueue[currentIndex];
   const isFinished = !currentCard || currentIndex >= sessionQueue.length;
+
+  const frontToShow = displayedFront || currentCard?.front || '';
+  const backToShow = displayedBack || currentCard?.back || '';
+
+  // Synchronize the displayed texts when the active card or flip state changes
+  useEffect(() => {
+    if (currentCard) {
+      if (!isFlipped) {
+        setDisplayedFront(currentCard.front);
+        setDisplayedBack(currentCard.back);
+      }
+    }
+  }, [currentCard, isFlipped]);
 
   // Touch gestures for mobile
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
@@ -244,6 +262,14 @@ export function ReviewScreen({
     // Persist card score to database
     await scoreCard(deck.id, currentCard.id, currentCard, quality);
 
+    // Preload the next card's front text immediately so that as the card flips back
+    // to the front, the user already sees the new question instead of the old one.
+    const nextIndex = currentIndex + 1;
+    const nextCard = sessionQueue[nextIndex];
+    if (nextCard) {
+      setDisplayedFront(nextCard.front);
+    }
+
     // Flip card back to front
     setIsFlipped(false);
 
@@ -265,6 +291,8 @@ export function ReviewScreen({
     setCurrentIndex(0);
     setCompletedCount(0);
     setIsFlipped(false);
+    setDisplayedFront('');
+    setDisplayedBack('');
   };
 
   if (loading) {
@@ -337,12 +365,12 @@ export function ReviewScreen({
             <div className="flashcard-inner">
               {/* Front Face */}
               <div className="flashcard-face flashcard-front">
-                <span className="flashcard-text">{currentCard.front}</span>
+                <span className="flashcard-text">{frontToShow}</span>
               </div>
               
               {/* Back Face */}
               <div className="flashcard-face flashcard-back">
-                <span className="flashcard-text">{currentCard.back}</span>
+                <span className="flashcard-text">{backToShow}</span>
               </div>
             </div>
           </div>
