@@ -100,9 +100,6 @@ export function ReviewScreen({
   const [keyboardSwipeDirection, setKeyboardSwipeDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    // Gestures are only active when card is flipped (showing answer)
-    if (!isFlipped) return;
-    
     // Check if the touch is on standard buttons to avoid overriding button clicks
     const target = e.target as HTMLElement;
     if (target.closest('.back-link') || target.closest('.btn') || target.closest('.btn-score')) {
@@ -139,14 +136,10 @@ export function ReviewScreen({
     const diffY = touchCurrent.y - touchStart.y;
     const threshold = 80; // Minimal swipe distance in pixels
 
-    if (Math.abs(diffX) > Math.abs(diffY)) {
-      // Horizontal swipe
-      if (Math.abs(diffX) > threshold) {
-        if (diffX > 0) {
-          handleScore(4); // Swipe Right -> Good (4)
-        } else {
-          handleScore(1); // Swipe Left -> Again (1)
-        }
+    if (!isFlipped) {
+      // If the card is not flipped yet, any swipe direction flips it to reveal the answer
+      if (Math.abs(diffX) > threshold || Math.abs(diffY) > threshold) {
+        setIsFlipped(true);
         resetSwipeState();
         setTimeout(() => {
           dragOccurred.current = false;
@@ -154,18 +147,35 @@ export function ReviewScreen({
         return;
       }
     } else {
-      // Vertical swipe
-      if (Math.abs(diffY) > threshold) {
-        if (diffY > 0) {
-          handleScore(3); // Swipe Down -> Hard (3)
-        } else {
-          handleScore(5); // Swipe Up -> Easy (5)
+      // If the card is flipped, swipe to score
+      if (Math.abs(diffX) > Math.abs(diffY)) {
+        // Horizontal swipe
+        if (Math.abs(diffX) > threshold) {
+          if (diffX > 0) {
+            handleScore(4); // Swipe Right -> Good (4)
+          } else {
+            handleScore(1); // Swipe Left -> Again (1)
+          }
+          resetSwipeState();
+          setTimeout(() => {
+            dragOccurred.current = false;
+          }, 50);
+          return;
         }
-        resetSwipeState();
-        setTimeout(() => {
-          dragOccurred.current = false;
-        }, 50);
-        return;
+      } else {
+        // Vertical swipe
+        if (Math.abs(diffY) > threshold) {
+          if (diffY > 0) {
+            handleScore(3); // Swipe Down -> Hard (3)
+          } else {
+            handleScore(5); // Swipe Up -> Easy (5)
+          }
+          resetSwipeState();
+          setTimeout(() => {
+            dragOccurred.current = false;
+          }, 50);
+          return;
+        }
       }
     }
 
@@ -204,6 +214,7 @@ export function ReviewScreen({
 
   // Determine which border direction is active to highlight it
   const getActiveDirection = (): 'left' | 'right' | 'up' | 'down' | null => {
+    if (!isFlipped) return null;
     if (keyboardSwipeDirection) return keyboardSwipeDirection;
     if (!touchStart || !touchCurrent || !isSwiping) return null;
 
