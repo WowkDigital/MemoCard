@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   collection, 
   doc, 
@@ -207,7 +207,7 @@ export function useFirestore(userId: string | undefined) {
   };
 
   // 6b. Pobieranie kart talii z priorytetem cache-first oraz synchronizacją w tle
-  const getCardsOnce = async (deckId: string, callback?: (cards: Card[]) => void) => {
+  const getCardsOnce = useCallback(async (deckId: string, callback?: (cards: Card[]) => void) => {
     if (!userId) return [];
     const cardsRef = collection(db, 'users', userId, 'decks', deckId, 'cards');
     const q = query(cardsRef, orderBy('createdAt', 'desc'));
@@ -266,7 +266,7 @@ export function useFirestore(userId: string | undefined) {
       // W razie błędu sieci (np. offline) zwracamy dane z cache
       return cachedCards;
     }
-  };
+  }, [userId]);
 
   // 7. Update SRS parameters after scoring a card (SuperMemo-2 SM-2)
   // quality: 1 (Again), 3 (Hard), 4 (Good), 5 (Easy)

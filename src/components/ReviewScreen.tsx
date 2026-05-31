@@ -35,15 +35,59 @@ export function ReviewScreen({
   const frontToShow = displayedFront || currentCard?.front || '';
   const backToShow = displayedBack || currentCard?.back || '';
 
+  const backTimeoutRef = useRef<any>(null);
+  const scoringRef = useRef(false);
+
+  console.log("ReviewScreen render:", { 
+    currentIndex, 
+    isFlipped, 
+    displayedFront, 
+    displayedBack, 
+    currentCardFront: currentCard?.front,
+    sessionQueueLength: sessionQueue.length 
+  });
+
   // Synchronize the displayed texts when the active card changes.
-  // We exclude `isFlipped` from dependencies to ensure we do not overwrite the
-  // preloaded next card's front text during the transition.
   useEffect(() => {
+    console.log("useEffect [currentCard] running. currentCard:", currentCard?.front, "isFlipped:", isFlipped);
     if (currentCard) {
       setDisplayedFront(currentCard.front);
+      
+      // Clear any pending back text update
+      if (backTimeoutRef.current) {
+        clearTimeout(backTimeoutRef.current);
+      }
+
+      // If the card is already flipped, update the back text immediately.
+      // Otherwise, delay updating it to avoid the text swap flicker while the back face is fading out.
+      if (isFlipped) {
+        setDisplayedBack(currentCard.back);
+      } else {
+        backTimeoutRef.current = setTimeout(() => {
+          console.log("Timeout setDisplayedBack fired. Setting to:", currentCard.back);
+          setDisplayedBack(currentCard.back);
+          backTimeoutRef.current = null;
+        }, 200);
+      }
+    }
+    return () => {
+      if (backTimeoutRef.current) {
+        clearTimeout(backTimeoutRef.current);
+      }
+    };
+  }, [currentCard]);
+
+  // If the user flips the card to see the answer, immediately update the back text
+  useEffect(() => {
+    console.log("useEffect [isFlipped] running. isFlipped:", isFlipped, "displayedBack:", displayedBack, "currentCardBack:", currentCard?.back);
+    if (isFlipped && currentCard && displayedBack !== currentCard.back) {
+      if (backTimeoutRef.current) {
+        clearTimeout(backTimeoutRef.current);
+        backTimeoutRef.current = null;
+      }
       setDisplayedBack(currentCard.back);
     }
-  }, [currentCard]);
+  }, [isFlipped, currentCard, displayedBack]);
 
 
   // Touch gestures for mobile
@@ -138,6 +182,7 @@ export function ReviewScreen({
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
+    console.log("handleCardClick triggered, isFlipped:", isFlipped, "dragOccurred:", dragOccurred.current);
     e.stopPropagation();
     if (dragOccurred.current) {
       return; // Prevent flip if they were swiping
@@ -146,6 +191,7 @@ export function ReviewScreen({
   };
 
   const handleContainerClick = (e: React.MouseEvent) => {
+    console.log("handleContainerClick triggered, isFlipped:", isFlipped);
     // If the card is already flipped, click on background does nothing
     if (isFlipped) return;
     
@@ -184,6 +230,7 @@ export function ReviewScreen({
     if (loading || isFinished) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       const activeElement = document.activeElement as HTMLElement;
       if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
         return;
@@ -268,38 +315,44 @@ export function ReviewScreen({
     return () => {
       isMounted = false;
     };
-  }, [deck.id, getCardsOnce]);
+  }, [deck.id]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   const handleScore = async (quality: number) => {
-    if (!currentCard) return;
+    console.log("handleScore called. Card:", currentCard?.front, "Quality:", quality);
+    if (scoringRef.current || !currentCard) return;
+    scoringRef.current = true;
 
     dragOccurred.current = false;
 
-    // Persist card score to database
-    await scoreCard(deck.id, currentCard.id, currentCard, quality);
+    // Keep the old back text temporarily during the transition to avoid text swap flicker
+    setDisplayedBack(currentCard.back);
 
-    // Preload the next card's front text immediately so that as the card flips back
-    // to the front, the user already sees the new question instead of the old one.
-    const nextIndex = currentIndex + 1;
-    const nextCard = sessionQueue[nextIndex];
-    if (nextCard) {
-      setDisplayedFront(nextCard.front);
-    }
+    try {
+      // Persist card score to database
+      console.log("Calling scoreCard for:", currentCard.id);
+      await scoreCard(deck.id, currentCard.id, currentCard, quality);
+      console.log("scoreCard returned for:", currentCard.id);
 
-    // Flip card back to front
-    setIsFlipped(false);
-
-    // Brief delay to allow the fade transition to reset before showing next card
-    setTimeout(() => {
+      // Update queue/completed count immediately
       if (quality < 4) {
         // If wrong or hard answer, put the card at the end of the current session queue
         setSessionQueue(prev => [...prev, currentCard]);
       } else {
         setCompletedCount(prev => prev + 1);
       }
-      
+
+      // Flip card back to front immediately
+      console.log("Setting isFlipped to false");
+      setIsFlipped(false);
+
+      // Advance to the next card immediately without delay
+      console.log("Advancing currentIndex from:", currentIndex);
       setCurrentIndex(prev => prev + 1);
-    }, 150);
+    } catch (err) {
+      console.error("Error during scoring:", err);
+    } finally {
+      scoringRef.current = false;
+    }
   };
 
   const handleResetSession = () => {
