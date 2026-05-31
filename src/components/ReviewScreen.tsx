@@ -371,7 +371,25 @@ export function ReviewScreen({
               </div>
               
               {/* Back Face */}
-              <div className="flashcard-face flashcard-back">
+              <div className="flashcard-face flashcard-back" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
+                <div style={{
+                  position: 'absolute',
+                  top: '20px',
+                  left: '20px',
+                  right: '20px',
+                  fontSize: '0.85rem',
+                  color: 'var(--text-secondary)',
+                  opacity: 0.7,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  textAlign: 'center',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  paddingBottom: '8px',
+                  fontStyle: 'italic'
+                }}>
+                  {frontToShow}
+                </div>
                 <span className="flashcard-text">{backToShow}</span>
               </div>
             </div>

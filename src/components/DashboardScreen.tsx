@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
-import type { Deck } from '../hooks/useFirestore';
+import type { Deck, Card } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
 import { parseImportData } from '../utils/importParser';
 
@@ -22,7 +22,75 @@ export function DashboardScreen({
   onStartReview,
   showToast
 }: DashboardScreenProps) {
-  const { decks, loadingDecks, addDeck, importDeck, cloneSharedDeck } = useFirestore(user.uid);
+  const { decks, loadingDecks, addDeck, importDeck, cloneSharedDeck, subscribeToCards } = useFirestore(user.uid);
+  
+  const [deckStats, setDeckStats] = useState<Record<string, { total: number; due: number; mastered: number; ease: string }>>({});
+
+  useEffect(() => {
+    if (loadingDecks || decks.length === 0) return;
+
+    const unsubscribes: (() => void)[] = [];
+
+    decks.forEach((deck) => {
+      if (deck.isShared) {
+        setDeckStats(prev => ({
+          ...prev,
+          [deck.id]: {
+            total: deck.cardCount || 0,
+            due: 0,
+            mastered: 0,
+            ease: '2.50'
+          }
+        }));
+        return;
+      }
+
+      const unsubscribe = subscribeToCards(deck.id, (loadedCards: Card[]) => {
+        const total = loadedCards.length;
+        let due = 0;
+        let mastered = 0;
+        let totalEase = 0;
+        let easeCount = 0;
+        const now = new Date();
+
+        loadedCards.forEach(card => {
+          if (card.nextReview) {
+            const reviewDate = typeof card.nextReview.toDate === 'function' 
+              ? card.nextReview.toDate() 
+              : new Date((card.nextReview as any).seconds * 1000);
+            if (reviewDate <= now) {
+              due++;
+            }
+          } else {
+            due++;
+          }
+
+          if (card.repetitions > 0 && card.interval >= 7) {
+            mastered++;
+          }
+
+          if (card.easeFactor) {
+            totalEase += card.easeFactor;
+            easeCount++;
+          }
+        });
+
+        const ease = easeCount > 0 ? (totalEase / easeCount).toFixed(2) : '2.50';
+
+        setDeckStats(prev => ({
+          ...prev,
+          [deck.id]: { total, due, mastered, ease }
+        }));
+      });
+
+      unsubscribes.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribes.forEach(un => un());
+    };
+  }, [decks, loadingDecks]);
+
   useEffect(() => {
     if ((window as any).WowkDigitalFooter) {
       (window as any).WowkDigitalFooter.init({
@@ -274,42 +342,78 @@ export function DashboardScreen({
         ) : (
           <div className="deck-list">
             {decks.map((deck) => (
-              <div key={deck.id} className="deck-card glass">
-                <div className="deck-info">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span className="deck-name">{deck.name}</span>
-                    {deck.isShared && (
-                      <span className="card-badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#a5b4fc', fontSize: '0.75rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                        Shared
-                      </span>
-                    )}
+              <div key={deck.id} className="deck-card glass" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
+                  <div className="deck-info" style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span className="deck-name">{deck.name}</span>
+                      {deck.isShared && (
+                        <span className="card-badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#a5b4fc', fontSize: '0.75rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                          Shared
+                        </span>
+                      )}
+                    </div>
+                    {deck.description && <span className="deck-desc">{deck.description}</span>}
                   </div>
-                  {deck.description && <span className="deck-desc">{deck.description}</span>}
-                </div>
-                <div className="deck-meta">
-                  <span className="card-badge">
-                    {deck.cardCount} {deck.cardCount === 1 ? 'card' : 'cards'}
-                  </span>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  
+                  {/* Action buttons (only icons, no text labels) */}
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                     <button 
                       className="btn btn-secondary" 
-                      style={{ padding: '8px 12px', width: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      style={{ padding: '0', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
                       onClick={() => handleSelectDeckClick(deck)}
                       title="Manage cards"
                     >
-                      <Settings size={14} />
-                      <span className="mobile-hide">Edit</span>
+                      <Settings size={16} />
                     </button>
                     <button 
                       className="btn btn-primary" 
-                      style={{ padding: '8px 12px', width: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      style={{ padding: '0', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
                       onClick={() => handleStartReviewClick(deck)}
-                      disabled={deck.cardCount === 0}
-                      title={deck.cardCount === 0 ? "No cards to study" : "Start studying"}
+                      disabled={(deckStats[deck.id]?.total ?? deck.cardCount) === 0}
+                      title={(deckStats[deck.id]?.total ?? deck.cardCount) === 0 ? "No cards to study" : "Start studying"}
                     >
-                      <BookOpen size={14} />
-                      <span>Study</span>
+                      <BookOpen size={16} />
                     </button>
+                  </div>
+                </div>
+
+                {/* Colored Metrics Row */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px', 
+                  borderTop: '1px solid var(--border-light)', 
+                  paddingTop: '10px',
+                  fontSize: '0.8rem',
+                  color: 'var(--text-secondary)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Total Cards">
+                    <span>Total:</span>
+                    <strong style={{ color: 'var(--primary)' }}>
+                      {deckStats[deck.id]?.total ?? deck.cardCount}
+                    </strong>
+                  </div>
+                  <span style={{ opacity: 0.2 }}>|</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Due Now">
+                    <span>Due:</span>
+                    <strong style={{ color: (deckStats[deck.id]?.due ?? 0) > 0 ? 'var(--color-again)' : 'var(--text-muted)' }}>
+                      {deckStats[deck.id]?.due ?? 0}
+                    </strong>
+                  </div>
+                  <span style={{ opacity: 0.2 }}>|</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Mastered">
+                    <span>Mastered:</span>
+                    <strong style={{ color: 'var(--color-easy)' }}>
+                      {deckStats[deck.id]?.mastered ?? 0}
+                    </strong>
+                  </div>
+                  <span style={{ opacity: 0.2 }}>|</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Average Ease Factor">
+                    <span>Ease:</span>
+                    <strong style={{ color: '#c084fc' }}>
+                      {deckStats[deck.id]?.ease ?? '2.50'}
+                    </strong>
                   </div>
                 </div>
               </div>
