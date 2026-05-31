@@ -15,7 +15,6 @@ import {
   collectionGroup,
   getDoc,
   getDocs,
-  setDoc,
   getDocsFromCache,
   getDocsFromServer
 } from 'firebase/firestore';
@@ -76,13 +75,19 @@ export function useFirestore(userId: string | undefined) {
       }) as Deck[];
 
       // Filter duplicates: if the user has already cloned a deck (their own document with the same ID),
-      // we do not show the original shared version
+      // we do not show the original shared version.
+      // Also, ensure each shared deck ID is only displayed once in the list.
       const myDeckIds = new Set(allDecks.filter(d => d.ownerId === userId).map(d => d.id));
+      const seenSharedIds = new Set<string>();
       
       const filteredDecks = allDecks.filter(deck => {
         if (deck.ownerId === userId) return true;
         // Show shared deck only when guest/user does not have its copy with the same ID yet
-        return !myDeckIds.has(deck.id);
+        if (myDeckIds.has(deck.id)) return false;
+        // Show only one copy of each shared deck ID
+        if (seenSharedIds.has(deck.id)) return false;
+        seenSharedIds.add(deck.id);
+        return true;
       });
 
       // Sorting: own first, then shared
@@ -318,20 +323,23 @@ export function useFirestore(userId: string | undefined) {
   const importDeck = async (name: string, description: string, cardsList: { front: string; back: string }[]) => {
     if (!userId) return;
     try {
-      const decksRef = collection(db, 'users', userId, 'decks');
-      const deckDocRef = await addDoc(decksRef, {
+      const deckDocRef = doc(collection(db, 'users', userId, 'decks'));
+      const now = new Date();
+      const chunkSize = 400;
+
+      // 1. Utworzenie pierwszego wsadu z dokumentem talii oraz pierwszym pakietem kart
+      const firstBatch = writeBatch(db);
+      firstBatch.set(deckDocRef, {
         name,
         description,
         createdAt: serverTimestamp(),
         cardCount: cardsList.length
       });
 
-      const batch = writeBatch(db);
-      const now = new Date();
-
-      cardsList.forEach((card) => {
+      const firstChunk = cardsList.slice(0, chunkSize);
+      firstChunk.forEach((card) => {
         const cardRef = doc(collection(db, 'users', userId, 'decks', deckDocRef.id, 'cards'));
-        batch.set(cardRef, {
+        firstBatch.set(cardRef, {
           front: card.front,
           back: card.back,
           createdAt: serverTimestamp(),
@@ -341,8 +349,29 @@ export function useFirestore(userId: string | undefined) {
           nextReview: Timestamp.fromDate(now)
         });
       });
+      await firstBatch.commit();
 
-      await batch.commit();
+      // 2. Utworzenie i wgranie kolejnych pakietów kart w pętli (zabezpieczenie przed limitem 500 operacji Firestore)
+      for (let i = chunkSize; i < cardsList.length; i += chunkSize) {
+        const chunk = cardsList.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach((card) => {
+          const cardRef = doc(collection(db, 'users', userId, 'decks', deckDocRef.id, 'cards'));
+          batch.set(cardRef, {
+            front: card.front,
+            back: card.back,
+            createdAt: serverTimestamp(),
+            interval: 0,
+            easeFactor: 2.5,
+            repetitions: 0,
+            nextReview: Timestamp.fromDate(now)
+          });
+        });
+        await batch.commit();
+      }
+
+      // 3. Inwalidacja pamięci podręcznej dla nowo wgranej talii
+      delete serverSyncCache[deckDocRef.id];
     } catch (error) {
       console.error("Error importing deck:", error);
       throw error;
@@ -356,28 +385,36 @@ export function useFirestore(userId: string | undefined) {
       // Inwalidacja pamięci podręcznej synchronizacji dla tej talii
       delete serverSyncCache[deckId];
 
-      const batch = writeBatch(db);
       const now = new Date();
+      const chunkSize = 400;
 
-      cardsList.forEach((card) => {
-        const cardRef = doc(collection(db, 'users', userId, 'decks', deckId, 'cards'));
-        batch.set(cardRef, {
-          front: card.front,
-          back: card.back,
-          createdAt: serverTimestamp(),
-          interval: 0,
-          easeFactor: 2.5,
-          repetitions: 0,
-          nextReview: Timestamp.fromDate(now)
+      // 1. Zapis kart w pakietach po 400 sztuk (zabezpieczenie przed limitem 500 operacji Firestore)
+      for (let i = 0; i < cardsList.length; i += chunkSize) {
+        const chunk = cardsList.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach((card) => {
+          const cardRef = doc(collection(db, 'users', userId, 'decks', deckId, 'cards'));
+          batch.set(cardRef, {
+            front: card.front,
+            back: card.back,
+            createdAt: serverTimestamp(),
+            interval: 0,
+            easeFactor: 2.5,
+            repetitions: 0,
+            nextReview: Timestamp.fromDate(now)
+          });
         });
-      });
+        await batch.commit();
+      }
 
+      // 2. Aktualizacja liczby kart w dokumencie talii
       const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
-      batch.update(deckDocRef, {
+      await updateDoc(deckDocRef, {
         cardCount: increment(cardsList.length)
       });
 
-      await batch.commit();
+      // 3. Ponowne wyczyszczenie cache po zakończeniu zapisu
+      delete serverSyncCache[deckId];
     } catch (error) {
       console.error("Error importing cards:", error);
       throw error;
@@ -388,30 +425,32 @@ export function useFirestore(userId: string | undefined) {
   const cloneSharedDeck = async (sharedOwnerId: string, sharedDeckId: string) => {
     if (!userId) return;
     try {
-      // 1. Get original deck data
+      // 1. Pobranie danych oryginalnej talii
       const sharedDeckDoc = await getDoc(doc(db, 'users', sharedOwnerId, 'decks', sharedDeckId));
       if (!sharedDeckDoc.exists()) return;
       const deckData = sharedDeckDoc.data();
 
-      // 2. Get all cards from the original deck
+      // 2. Pobranie wszystkich kart z oryginalnej talii
       const cardsSnapshot = await getDocs(collection(db, 'users', sharedOwnerId, 'decks', sharedDeckId, 'cards'));
+      const cardsList = cardsSnapshot.docs.map(doc => doc.data());
       
-      // 3. Create deck for the current user with the same ID (to prevent double cloning)
       const newDeckRef = doc(db, 'users', userId, 'decks', sharedDeckId);
-      await setDoc(newDeckRef, {
+      const now = new Date();
+      const chunkSize = 400;
+
+      // 3. Pierwszy wsad z nowym dokumentem talii oraz pierwszym pakietem kart
+      const firstBatch = writeBatch(db);
+      firstBatch.set(newDeckRef, {
         name: deckData.name,
         description: deckData.description || '',
         createdAt: serverTimestamp(),
-        cardCount: cardsSnapshot.size
+        cardCount: cardsList.length
       });
 
-      // 4. Copy cards with default study progress (SRS reset for this user)
-      const batch = writeBatch(db);
-      const now = new Date();
-      cardsSnapshot.docs.forEach((cardDoc) => {
-        const cardData = cardDoc.data();
+      const firstChunk = cardsList.slice(0, chunkSize);
+      firstChunk.forEach((cardData) => {
         const newCardRef = doc(collection(db, 'users', userId, 'decks', sharedDeckId, 'cards'));
-        batch.set(newCardRef, {
+        firstBatch.set(newCardRef, {
           front: cardData.front,
           back: cardData.back,
           createdAt: serverTimestamp(),
@@ -421,7 +460,29 @@ export function useFirestore(userId: string | undefined) {
           nextReview: Timestamp.fromDate(now)
         });
       });
-      await batch.commit();
+      await firstBatch.commit();
+
+      // 4. Skopiowanie pozostałych kart w pakietach po 400
+      for (let i = chunkSize; i < cardsList.length; i += chunkSize) {
+        const chunk = cardsList.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach((cardData) => {
+          const newCardRef = doc(collection(db, 'users', userId, 'decks', sharedDeckId, 'cards'));
+          batch.set(newCardRef, {
+            front: cardData.front,
+            back: cardData.back,
+            createdAt: serverTimestamp(),
+            interval: 0,
+            easeFactor: 2.5,
+            repetitions: 0,
+            nextReview: Timestamp.fromDate(now)
+          });
+        });
+        await batch.commit();
+      }
+
+      // 5. Inwalidacja pamięci podręcznej synchronizacji
+      delete serverSyncCache[sharedDeckId];
     } catch (error) {
       console.error("Error cloning deck:", error);
       throw error;
