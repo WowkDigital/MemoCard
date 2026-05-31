@@ -22,7 +22,7 @@ export function DashboardScreen({
   onStartReview,
   showToast
 }: DashboardScreenProps) {
-  const { decks, loadingDecks, addDeck, importDeck, cloneSharedDeck, subscribeToCards } = useFirestore(user.uid);
+  const { decks, loadingDecks, addDeck, importDeck, cloneSharedDeck, getCardsOnce } = useFirestore(user.uid);
   
   const [deckStats, setDeckStats] = useState<Record<string, { total: number; due: number; mastered: number; ease: string }>>({});
   const [expandedDecks, setExpandedDecks] = useState<Record<string, boolean>>({});
@@ -36,8 +36,6 @@ export function DashboardScreen({
 
   useEffect(() => {
     if (loadingDecks || decks.length === 0) return;
-
-    const unsubscribes: (() => void)[] = [];
 
     decks.forEach((deck) => {
       if (deck.isShared) {
@@ -53,7 +51,8 @@ export function DashboardScreen({
         return;
       }
 
-      const unsubscribe = subscribeToCards(deck.id, (loadedCards: Card[]) => {
+      // Fetch cards with cache-first and background server check
+      getCardsOnce(deck.id, (loadedCards: Card[]) => {
         const total = loadedCards.length;
         let due = 0;
         let mastered = 0;
@@ -90,13 +89,7 @@ export function DashboardScreen({
           [deck.id]: { total, due, mastered, ease }
         }));
       });
-
-      unsubscribes.push(unsubscribe);
     });
-
-    return () => {
-      unsubscribes.forEach(un => un());
-    };
   }, [decks, loadingDecks]);
 
   useEffect(() => {

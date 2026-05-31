@@ -3,7 +3,8 @@ import { getAuth } from 'firebase/auth';
 import { 
   initializeFirestore, 
   persistentLocalCache, 
-  persistentMultipleTabManager 
+  persistentMultipleTabManager,
+  CACHE_SIZE_UNLIMITED
 } from 'firebase/firestore';
 
 // Zabezpieczenie przed brakiem zmiennych środowiskowych przy pierwszym uruchomieniu
@@ -22,10 +23,11 @@ const app = initializeApp(firebaseConfig);
 // Inicjalizacja Authentication
 const auth = getAuth(app);
 
-// Inicjalizacja Firestore z włączonym offline persistence (wsparcie dla wielu kart)
+// Inicjalizacja Firestore z włączonym offline persistence (wsparcie dla wielu kart) i nielimitowaną pamięcią podręczną
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
+    tabManager: persistentMultipleTabManager(),
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED
   })
 });
 

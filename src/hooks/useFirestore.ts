@@ -15,9 +15,17 @@ import {
   collectionGroup,
   getDoc,
   getDocs,
-  setDoc
+  setDoc,
+  getDocsFromCache,
+  getDocsFromServer
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+
+// Pamięć podręczna w pamięci aplikacji do przechowywania znaczników czasu ostatniej synchronizacji z serwerem.
+// Zapobiega to nadmiarowym zapytaniom do serwera podczas nawigacji między ekranami (np. powrót do Dashboardu).
+const serverSyncCache: Record<string, number> = {};
+const CACHE_EXPIRATION_MS = 2 * 60 * 1000; // 2 minuty
+
 
 export interface Deck {
   id: string;
@@ -127,6 +135,9 @@ export function useFirestore(userId: string | undefined) {
   const addCard = async (deckId: string, front: string, back: string) => {
     if (!userId) return;
     try {
+      // Inwalidacja pamięci podręcznej synchronizacji dla tej talii
+      delete serverSyncCache[deckId];
+
       const cardsRef = collection(db, 'users', userId, 'decks', deckId, 'cards');
       const now = new Date();
       
@@ -156,6 +167,9 @@ export function useFirestore(userId: string | undefined) {
   const deleteCard = async (deckId: string, cardId: string) => {
     if (!userId) return;
     try {
+      // Inwalidacja pamięci podręcznej synchronizacji dla tej talii
+      delete serverSyncCache[deckId];
+
       const cardDocRef = doc(db, 'users', userId, 'decks', deckId, 'cards', cardId);
       await deleteDoc(cardDocRef);
 
@@ -187,11 +201,76 @@ export function useFirestore(userId: string | undefined) {
     });
   };
 
+  // 6b. Pobieranie kart talii z priorytetem cache-first oraz synchronizacją w tle
+  const getCardsOnce = async (deckId: string, callback?: (cards: Card[]) => void) => {
+    if (!userId) return [];
+    const cardsRef = collection(db, 'users', userId, 'decks', deckId, 'cards');
+    const q = query(cardsRef, orderBy('createdAt', 'desc'));
+
+    let cachedCards: Card[] = [];
+    let hasCache = false;
+
+    // 1. Próba natychmiastowego odczytu z lokalnej pamięci podręcznej (IndexedDB)
+    try {
+      const cacheSnapshot = await getDocsFromCache(q);
+      if (!cacheSnapshot.empty) {
+        cachedCards = cacheSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Card[];
+        hasCache = true;
+        if (callback) {
+          callback(cachedCards);
+        }
+      }
+    } catch (err) {
+      console.warn("Brak danych w cache lub błąd (pobieranie z serwera):", err);
+    }
+
+    // 2. Sprawdzenie, czy cache dla tej talii nie wygasł (zapobieganie nadmiarowym zapytaniom sieciowym)
+    const now = Date.now();
+    const lastSync = serverSyncCache[deckId] || 0;
+    const isCacheStale = now - lastSync > CACHE_EXPIRATION_MS;
+
+    if (!isCacheStale && hasCache) {
+      // Pamięć podręczna jest świeża, zwracamy bez odpytywania serwera
+      return cachedCards;
+    }
+
+    // 3. Pobranie najnowszych danych z serwera w tle w celu synchronizacji cache i stanu UI
+    try {
+      const serverSnapshot = await getDocsFromServer(q);
+      const serverCards = serverSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Card[];
+      
+      // Zapisanie czasu udanej synchronizacji sieciowej
+      serverSyncCache[deckId] = Date.now();
+
+      // Wywołujemy callback tylko jeśli dane z serwera różnią się od cache (redukcja renderów Reacta)
+      const cachedIds = JSON.stringify(cachedCards.map(c => c.id + c.repetitions + c.interval + (c.nextReview?.seconds || 0)));
+      const serverIds = JSON.stringify(serverCards.map(c => c.id + c.repetitions + c.interval + (c.nextReview?.seconds || 0)));
+
+      if ((!hasCache || cachedIds !== serverIds) && callback) {
+        callback(serverCards);
+      }
+      return serverCards;
+    } catch (err) {
+      console.error("Błąd synchronizacji z serwerem Firestore (tryb offline):", err);
+      // W razie błędu sieci (np. offline) zwracamy dane z cache
+      return cachedCards;
+    }
+  };
+
   // 7. Update SRS parameters after scoring a card (SuperMemo-2 SM-2)
   // quality: 1 (Again), 3 (Hard), 4 (Good), 5 (Easy)
   const scoreCard = async (deckId: string, cardId: string, currentCard: Card, quality: number) => {
     if (!userId) return;
     try {
+      // Inwalidacja pamięci podręcznej synchronizacji dla tej talii
+      delete serverSyncCache[deckId];
+
       let nextRepetitions = currentCard.repetitions;
       let nextInterval = currentCard.interval;
       let nextEaseFactor = currentCard.easeFactor;
@@ -274,6 +353,9 @@ export function useFirestore(userId: string | undefined) {
   const importCards = async (deckId: string, cardsList: { front: string; back: string }[]) => {
     if (!userId) return;
     try {
+      // Inwalidacja pamięci podręcznej synchronizacji dla tej talii
+      delete serverSyncCache[deckId];
+
       const batch = writeBatch(db);
       const now = new Date();
 
@@ -354,6 +436,7 @@ export function useFirestore(userId: string | undefined) {
     addCard,
     deleteCard,
     subscribeToCards,
+    getCardsOnce,
     scoreCard,
     importDeck,
     importCards,

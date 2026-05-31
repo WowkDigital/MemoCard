@@ -15,7 +15,7 @@ export function ReviewScreen({
   deck,
   onBack
 }: ReviewScreenProps) {
-  const { scoreCard, subscribeToCards } = useFirestore(user.uid);
+  const { scoreCard, getCardsOnce } = useFirestore(user.uid);
   const [loading, setLoading] = useState(true);
   
   // Session queue for review cards
@@ -235,26 +235,40 @@ export function ReviewScreen({
 
   // Load and shuffle cards
   useEffect(() => {
-    const unsubscribe = subscribeToCards(deck.id, (loadedCards) => {
-      const now = new Date();
-      // Filter cards that are due for review
-      const due = loadedCards.filter(card => {
-        if (!card.nextReview) return true;
-        const reviewDate = card.nextReview.toDate();
-        return reviewDate <= now;
-      });
+    let isMounted = true;
 
-      // Shuffle due cards
-      const shuffledDue = [...due].sort(() => Math.random() - 0.5);
+    const loadReviewCards = async () => {
+      try {
+        const loadedCards = await getCardsOnce(deck.id);
+        if (!isMounted) return;
 
-      if (loading) {
+        const now = new Date();
+        // Filter cards that are due for review
+        const due = loadedCards.filter(card => {
+          if (!card.nextReview) return true;
+          const reviewDate = typeof card.nextReview.toDate === 'function'
+            ? card.nextReview.toDate()
+            : new Date((card.nextReview as any).seconds * 1000);
+          return reviewDate <= now;
+        });
+
+        // Shuffle due cards
+        const shuffledDue = [...due].sort(() => Math.random() - 0.5);
+
         setSessionQueue(shuffledDue);
         setLoading(false);
+      } catch (err) {
+        console.error("Error loading cards for review:", err);
+        if (isMounted) setLoading(false);
       }
-    });
+    };
 
-    return unsubscribe;
-  }, [deck.id, subscribeToCards, loading]);
+    loadReviewCards();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [deck.id, getCardsOnce]);
 
   const handleScore = async (quality: number) => {
     if (!currentCard) return;
