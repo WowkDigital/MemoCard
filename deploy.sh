@@ -2,6 +2,7 @@
 # Script to build and deploy MemoCard to Firebase Hosting
 
 echo -e "\033[0;36m🔨 Budowanie aplikacji...\033[0m"
+npm --no-git-tag-version version patch
 npm run build
 
 if [ $? -eq 0 ]; then

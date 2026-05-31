@@ -1,5 +1,6 @@
 # Script to build and deploy MemoCard to Firebase Hosting
 Write-Host "🔨 Budowanie aplikacji..." -ForegroundColor Cyan
+npm --no-git-tag-version version patch
 npm run build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Błąd podczas budowania projektu. Przerwano wdrożenie." -ForegroundColor Red

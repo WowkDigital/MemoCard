@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers } from 'lucide-react';
+import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, User as UserIcon } from 'lucide-react';
 import type { Deck } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
 import { parseImportData } from '../utils/importParser';
+
+declare const __APP_VERSION__: string;
 
 interface DashboardScreenProps {
   decks: Deck[];
@@ -105,14 +107,44 @@ export function DashboardScreen({
     <div className="container">
       {/* Header */}
       <header className="app-header">
-        <div className="logo">
+        <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Layers size={24} style={{ color: 'var(--primary)' }} />
           <span>MemoCard</span>
+          <span 
+            className="app-version" 
+            style={{ 
+              fontSize: '0.7rem', 
+              color: 'var(--text-secondary)', 
+              opacity: 0.6,
+              background: 'rgba(255, 255, 255, 0.05)', 
+              padding: '2px 6px', 
+              borderRadius: '4px',
+              border: '1px solid var(--border-light)',
+              fontWeight: 500
+            }}
+          >
+            v{__APP_VERSION__}
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span className="user-email" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            {user.isAnonymous ? 'Guest Account' : user.email}
-          </span>
+          <div 
+            className="user-avatar" 
+            title={user.isAnonymous ? 'Guest Account' : user.email || ''}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: '32px', 
+              height: '32px', 
+              borderRadius: '50%', 
+              background: user.isAnonymous ? 'rgba(255, 255, 255, 0.05)' : 'rgba(99, 102, 241, 0.15)',
+              border: `1px solid ${user.isAnonymous ? 'var(--border-light)' : 'rgba(99, 102, 241, 0.3)'}`,
+              color: user.isAnonymous ? 'var(--text-secondary)' : 'var(--primary)',
+              cursor: 'pointer'
+            }}
+          >
+            <UserIcon size={16} />
+          </div>
           <button className="logout-btn" onClick={onLogout} title="Sign out">
             <LogOut size={16} />
           </button>

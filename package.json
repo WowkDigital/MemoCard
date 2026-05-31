@@ -1,14 +1,14 @@
 {
   "name": "memocard",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "npm run build && npx firebase-tools deploy"
+    "deploy": "npm --no-git-tag-version version patch && npm run build && npx firebase-tools deploy"
   },
   "dependencies": {
     "firebase": "^12.13.0",
