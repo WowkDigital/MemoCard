@@ -3,7 +3,7 @@ import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, Use
 import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
-import { parseImportData } from '../utils/importParser';
+import { parseImportData, extractMetadata } from '../utils/importParser';
 
 declare const __APP_VERSION__: string;
 
@@ -131,6 +131,24 @@ export function DashboardScreen({
     window.location.reload();
   };
 
+  const getDeckCreationDateStr = (deck: Deck): string => {
+    if (!deck.createdAt) return 'Unknown';
+    let date: Date;
+    if (typeof deck.createdAt.toDate === 'function') {
+      date = deck.createdAt.toDate();
+    } else {
+      const ca = deck.createdAt as any;
+      if (ca instanceof Date) {
+        date = ca;
+      } else if (ca.seconds !== undefined) {
+        date = new Date(ca.seconds * 1000);
+      } else {
+        date = new Date(ca);
+      }
+    }
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDeckName, setNewDeckName] = useState('');
   const [newDeckDesc, setNewDeckDesc] = useState('');
@@ -207,28 +225,17 @@ export function DashboardScreen({
 
     setIsImporting(true);
     try {
-      let finalName = importName.trim();
-      let finalDesc = importDesc.trim();
-
-      // Try to automatically extract name and description if it's a JSON object
-      if (text.startsWith("{")) {
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed && typeof parsed === 'object') {
-            if (parsed.name) finalName = parsed.name;
-            if (parsed.description) finalDesc = parsed.description;
-          }
-        } catch (_) {}
-      }
-
       // Universal parsing
-      const cardsList = parseImportData(text);
+      const parsed = parseImportData(text);
+      
+      const finalName = importName.trim() || parsed.name || '';
+      const finalDesc = importDesc.trim() || parsed.description || '';
 
       if (!finalName) {
-        throw new Error('You must provide a deck name.');
+        throw new Error('Please provide a deck name (either fill the name field or include it at the beginning of the pasted data).');
       }
 
-      await importDeck(finalName, finalDesc, cardsList);
+      await importDeck(finalName, finalDesc, parsed.cards);
       showToast('New deck with flashcards imported!', 'success');
       setImportJSON('');
       setImportName('');
@@ -402,6 +409,14 @@ export function DashboardScreen({
                     <strong style={{ color: 'var(--color-easy)' }}>{deckStats[deck.id]?.mastered ?? 0}</strong>
                     <span style={{ opacity: 0.3 }}>/</span>
                     <strong style={{ color: '#c084fc' }}>{deckStats[deck.id]?.ease ?? '2.50'}</strong>
+                    {deck.createdAt && (
+                      <>
+                        <span style={{ opacity: 0.3, marginLeft: '4px', marginRight: '4px' }}>•</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Created: {getDeckCreationDateStr(deck)}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
                 
@@ -545,7 +560,13 @@ export function DashboardScreen({
                   style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
                   placeholder="Paste JSON array, CSV data (separated by ;) or copied columns from Excel..."
                   value={importJSON}
-                  onChange={(e) => setImportJSON(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setImportJSON(val);
+                    const meta = extractMetadata(val);
+                    if (meta.name) setImportName(meta.name);
+                    if (meta.description) setImportDesc(meta.description);
+                  }}
                   required
                 />
               </div>
@@ -557,23 +578,27 @@ export function DashboardScreen({
               )}
 
               <div style={{ marginBottom: '16px' }}>
-                <span className="form-label" style={{ marginBottom: '4px' }}>Allowed data formats:</span>
+                <span className="form-label" style={{ marginBottom: '4px' }}>Allowed data formats (optional metadata at the beginning):</span>
                 <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-{`// 1. Plain text / Excel Copy-Paste / CSV (most efficient!)
+{`// 1. Plain text / CSV with optional Metadata (Recommended)
+# name: Spanish Vocabulary
+# description: Common words and phrases
 Hola;Hello
 Gracias;Thank you
 
-// 2. Compact JSON (array of arrays)
-[
-  ["Hola", "Hello"],
-  ["Gracias", "Thank you"]
-]
-
-// 3. Full Deck JSON
+// 2. Compact JSON with optional Metadata
 {
-  "name": "Spanish",
-  "cards": [{ "front": "Hola", "back": "Hello" }]
-}`}
+  "name": "Spanish Vocabulary",
+  "description": "Common words and phrases",
+  "cards": [
+    ["Hola", "Hello"],
+    ["Gracias", "Thank you"]
+  ]
+}
+
+// 3. Simple Card List (no metadata)
+Hola;Hello
+Gracias;Thank you`}
                 </pre>
               </div>
 

@@ -3,11 +3,75 @@ export interface ParsedCard {
   back: string;
 }
 
+export interface ParseResult {
+  name?: string;
+  description?: string;
+  cards: ParsedCard[];
+}
+
+/**
+ * Extracts metadata (deck name and description) from raw import text.
+ * Safe to run during typing/pasting since it does not throw errors.
+ */
+export function extractMetadata(rawText: string): { name?: string; description?: string } {
+  const trimmed = rawText.trim();
+  if (!trimmed) return {};
+
+  // Try JSON first
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const name = parsed.name || parsed.deckName || parsed.title;
+        const description = parsed.description || parsed.deckDescription || parsed.desc;
+        return {
+          name: name ? String(name).trim() : undefined,
+          description: description ? String(description).trim() : undefined
+        };
+      }
+    } catch (_) {}
+  }
+
+  // Fallback to plain text headers
+  const lines = trimmed.split(/\r?\n/);
+  let name: string | undefined = undefined;
+  let description: string | undefined = undefined;
+  
+  const NAME_KEYS = /^(?:#|\/\/|;)?\s*(deck\s*name|name|deck\s*title|title)\s*[:=]\s*(.+)$/i;
+  const DESC_KEYS = /^(?:#|\/\/|;)?\s*(deck\s*description|description|deck\s*desc|desc)\s*[:=]\s*(.+)$/i;
+
+  for (let i = 0; i < Math.min(lines.length, 10); i++) { // only check first 10 lines
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const nameMatch = line.match(NAME_KEYS);
+    if (nameMatch) {
+      name = nameMatch[2].trim();
+      continue;
+    }
+
+    const descMatch = line.match(DESC_KEYS);
+    if (descMatch) {
+      description = descMatch[2].trim();
+      continue;
+    }
+
+    // Stop if we find a card row or a line that doesn't look like metadata/comment
+    if (!line.startsWith('#') && !line.startsWith('//') && !line.startsWith(';')) {
+      if (line.includes(';') || line.includes('\t') || line.includes('|')) {
+        break;
+      }
+    }
+  }
+
+  return { name, description };
+}
+
 /**
  * Intelligent parser that detects format (JSON array of objects, JSON array of arrays, or CSV/TSV plain text)
- * and returns a list of parsed cards.
+ * and returns a ParseResult containing a list of parsed cards and optional deck metadata.
  */
-export function parseImportData(rawText: string): ParsedCard[] {
+export function parseImportData(rawText: string): ParseResult {
   const trimmed = rawText.trim();
   if (!trimmed) {
     throw new Error("Pasted content is empty.");
@@ -20,15 +84,23 @@ export function parseImportData(rawText: string): ParsedCard[] {
 
       // A. Object with cards key (e.g. full deck)
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const name = parsed.name || parsed.deckName || parsed.title;
+        const description = parsed.description || parsed.deckDescription || parsed.desc;
         if (Array.isArray(parsed.cards)) {
-          return parseJsonArray(parsed.cards);
+          return {
+            name: name ? String(name).trim() : undefined,
+            description: description ? String(description).trim() : undefined,
+            cards: parseJsonArray(parsed.cards)
+          };
         }
         throw new Error("JSON object must contain a 'cards' array.");
       }
 
       // B. Direct array
       if (Array.isArray(parsed)) {
-        return parseJsonArray(parsed);
+        return {
+          cards: parseJsonArray(parsed)
+        };
       }
     } catch (err: any) {
       // If it started with JSON syntax but failed to parse, report JSON syntax error
@@ -79,13 +151,61 @@ function parseJsonArray(arr: any[]): ParsedCard[] {
   });
 }
 
-function parsePlainText(text: string): ParsedCard[] {
+function parsePlainText(text: string): ParseResult {
   const lines = text.split(/\r?\n/);
   const cards: ParsedCard[] = [];
+  let name: string | undefined = undefined;
+  let description: string | undefined = undefined;
+  
+  let inMetadata = true;
+  let startIndex = 0;
+
+  const NAME_KEYS = /^(?:#|\/\/|;)?\s*(deck\s*name|name|deck\s*title|title)\s*[:=]\s*(.+)$/i;
+  const DESC_KEYS = /^(?:#|\/\/|;)?\s*(deck\s*description|description|deck\s*desc|desc)\s*[:=]\s*(.+)$/i;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
+    if (!line) {
+      if (inMetadata) {
+        startIndex = i + 1;
+      }
+      continue;
+    }
+
+    if (inMetadata) {
+      const nameMatch = line.match(NAME_KEYS);
+      if (nameMatch) {
+        name = nameMatch[2].trim();
+        startIndex = i + 1;
+        continue;
+      }
+
+      const descMatch = line.match(DESC_KEYS);
+      if (descMatch) {
+        description = descMatch[2].trim();
+        startIndex = i + 1;
+        continue;
+      }
+
+      // Skip lines that start with comment tags but are not recognized metadata keys
+      if (line.startsWith('#') || line.startsWith('//') || line.startsWith(';')) {
+        startIndex = i + 1;
+        continue;
+      }
+
+      // Once we hit any normal line (e.g. without comment syntax), we exit metadata reading phase
+      inMetadata = false;
+    }
+  }
+
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i].trim();
     if (!line) continue; // Skip empty lines
+
+    // Skip comments in the middle of card lines
+    if (line.startsWith('#') || line.startsWith('//') || line.startsWith(';')) {
+      continue;
+    }
 
     // Detect separator in priority order: Tab (\t), Semicolon (;), Pipe (|)
     let separator = "";
@@ -121,5 +241,5 @@ function parsePlainText(text: string): ParsedCard[] {
     throw new Error("No valid flashcard lines found.");
   }
 
-  return cards;
+  return { name, description, cards };
 }

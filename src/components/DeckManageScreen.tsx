@@ -200,9 +200,9 @@ export function DeckManageScreen({
 
     setIsImporting(true);
     try {
-      const parsedCards = parseImportData(text);
-      await importCards(deck.id, parsedCards);
-      showToast(`${parsedCards.length} cards imported!`, 'success');
+      const parsed = parseImportData(text);
+      await importCards(deck.id, parsed.cards);
+      showToast(`${parsed.cards.length} cards imported!`, 'success');
       setImportJSON('');
       setShowImportMode(false);
     } catch (err: any) {
@@ -334,7 +334,7 @@ export function DeckManageScreen({
                 )}
 
                 <div style={{ marginBottom: '16px' }}>
-                  <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Examples of efficient formats:</span>
+                  <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Examples of efficient formats (metadata headers will be ignored since deck exists):</span>
                   <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
 {`// 1. Plain text / Excel / CSV (Recommended — fastest)
 Hello;Cześć
