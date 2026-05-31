@@ -30,7 +30,7 @@ export function DashboardScreen({
   const [newDeckDesc, setNewDeckDesc] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Stan importu JSON
+  // JSON import states
   const [showImportModal, setShowImportModal] = useState(false);
   const [importName, setImportName] = useState('');
   const [importDesc, setImportDesc] = useState('');
@@ -61,7 +61,7 @@ export function DashboardScreen({
     
     const text = importJSON.trim();
     if (!text) {
-      setImportError('Wklej dane do zaimportowania.');
+      setImportError('Please paste data to import.');
       return;
     }
 
@@ -70,7 +70,7 @@ export function DashboardScreen({
       let finalName = importName.trim();
       let finalDesc = importDesc.trim();
 
-      // Próba automatycznego wyciągnięcia nazwy i opisu z JSON, jeśli to obiekt
+      // Try to automatically extract name and description if it's a JSON object
       if (text.startsWith("{")) {
         try {
           const parsed = JSON.parse(text);
@@ -81,11 +81,11 @@ export function DashboardScreen({
         } catch (_) {}
       }
 
-      // Użycie uniwersalnego parsera
+      // Universal parsing
       const cardsList = parseImportData(text);
 
       if (!finalName) {
-        throw new Error('Musisz podać nazwę talii.');
+        throw new Error('You must provide a deck name.');
       }
 
       await onImportDeck(finalName, finalDesc, cardsList);
@@ -95,7 +95,7 @@ export function DashboardScreen({
       setShowImportModal(false);
     } catch (err: any) {
       console.error(err);
-      setImportError(err.message || 'Niepoprawny format danych.');
+      setImportError(err.message || 'Invalid data format.');
     } finally {
       setIsImporting(false);
     }
@@ -111,9 +111,9 @@ export function DashboardScreen({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span className="user-email" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            {user.isAnonymous ? 'Konto tymczasowe' : user.email}
+            {user.isAnonymous ? 'Guest Account' : user.email}
           </span>
-          <button className="logout-btn" onClick={onLogout} title="Wyloguj się">
+          <button className="logout-btn" onClick={onLogout} title="Sign out">
             <LogOut size={16} />
           </button>
         </div>
@@ -122,14 +122,14 @@ export function DashboardScreen({
       {/* Main Content */}
       <main style={{ flex: 1 }}>
         <div className="section-title">
-          <h2>Twoje Talie</h2>
+          <h2>Your Decks</h2>
           <div className="section-actions" style={{ display: 'flex', gap: '8px' }}>
             <button 
               className="btn btn-secondary" 
               style={{ width: 'auto', padding: '8px 16px', fontSize: '0.875rem' }}
               onClick={() => setShowImportModal(true)}
             >
-              Importuj z JSON
+              Import from JSON
             </button>
             <button 
               className="btn btn-primary" 
@@ -137,7 +137,7 @@ export function DashboardScreen({
               onClick={() => setShowAddModal(true)}
             >
               <Plus size={16} />
-              Nowa Talia
+              New Deck
             </button>
           </div>
         </div>
@@ -147,9 +147,9 @@ export function DashboardScreen({
         ) : decks.length === 0 ? (
           <div className="empty-state glass">
             <FolderPlus size={48} className="empty-icon" />
-            <p className="empty-text">Nie masz jeszcze żadnych talii fiszek.</p>
+            <p className="empty-text">You do not have any flashcard decks yet.</p>
             <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => setShowAddModal(true)}>
-              Stwórz pierwszą talię
+              Create your first deck
             </button>
           </div>
         ) : (
@@ -161,33 +161,35 @@ export function DashboardScreen({
                     <span className="deck-name">{deck.name}</span>
                     {deck.isShared && (
                       <span className="card-badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#a5b4fc', fontSize: '0.75rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                        Wspólna
+                        Shared
                       </span>
                     )}
                   </div>
                   {deck.description && <span className="deck-desc">{deck.description}</span>}
                 </div>
                 <div className="deck-meta">
-                  <span className="card-badge">{deck.cardCount} kart</span>
+                  <span className="card-badge">
+                    {deck.cardCount} {deck.cardCount === 1 ? 'card' : 'cards'}
+                  </span>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button 
                       className="btn btn-secondary" 
                       style={{ padding: '8px 12px', width: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
                       onClick={() => onSelectDeck(deck)}
-                      title="Zarządzaj kartami"
+                      title="Manage cards"
                     >
                       <Settings size={14} />
-                      <span className="mobile-hide">Edytuj</span>
+                      <span className="mobile-hide">Edit</span>
                     </button>
                     <button 
                       className="btn btn-primary" 
                       style={{ padding: '8px 12px', width: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
                       onClick={() => onStartReview(deck)}
                       disabled={deck.cardCount === 0}
-                      title={deck.cardCount === 0 ? "Brak kart do nauki" : "Rozpocznij naukę"}
+                      title={deck.cardCount === 0 ? "No cards to study" : "Start studying"}
                     >
                       <BookOpen size={14} />
-                      <span>Ucz się</span>
+                      <span>Study</span>
                     </button>
                   </div>
                 </div>
@@ -202,7 +204,7 @@ export function DashboardScreen({
         <div className="modal-overlay">
           <div className="modal-content glass animate-fade-in">
             <div className="modal-header">
-              <h3 className="modal-title">Nowa Talia Fiszek</h3>
+              <h3 className="modal-title">New Flashcard Deck</h3>
               <button className="close-btn" onClick={() => setShowAddModal(false)}>
                 <X size={20} />
               </button>
@@ -210,11 +212,11 @@ export function DashboardScreen({
             
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label className="form-label">Nazwa talii</label>
+                <label className="form-label">Deck name</label>
                 <input 
                   type="text" 
                   className="form-input" 
-                  placeholder="np. Słówka angielskie C1" 
+                  placeholder="e.g. English Vocabulary C1" 
                   value={newDeckName}
                   onChange={(e) => setNewDeckName(e.target.value)}
                   required
@@ -224,11 +226,11 @@ export function DashboardScreen({
               </div>
               
               <div className="form-group">
-                <label className="form-label">Opis (opcjonalnie)</label>
+                <label className="form-label">Description (optional)</label>
                 <input 
                   type="text" 
                   className="form-input" 
-                  placeholder="np. Zwroty z rozdziału 4" 
+                  placeholder="e.g. Phrases from chapter 4" 
                   value={newDeckDesc}
                   onChange={(e) => setNewDeckDesc(e.target.value)}
                   maxLength={100}
@@ -242,7 +244,7 @@ export function DashboardScreen({
                   style={{ width: 'auto' }}
                   onClick={() => setShowAddModal(false)}
                 >
-                  Anuluj
+                  Cancel
                 </button>
                 <button 
                   type="submit" 
@@ -250,7 +252,7 @@ export function DashboardScreen({
                   style={{ width: 'auto' }}
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Tworzenie...' : 'Stwórz'}
+                  {isSubmitting ? 'Creating...' : 'Create'}
                 </button>
               </div>
             </form>
@@ -263,7 +265,7 @@ export function DashboardScreen({
         <div className="modal-overlay">
           <div className="modal-content glass animate-fade-in" style={{ maxWidth: '520px' }}>
             <div className="modal-header">
-              <h3 className="modal-title">Importuj talię</h3>
+              <h3 className="modal-title">Import Deck</h3>
               <button className="close-btn" onClick={() => setShowImportModal(false)}>
                 <X size={20} />
               </button>
@@ -272,22 +274,22 @@ export function DashboardScreen({
             <form onSubmit={handleImportSubmit}>
               <div className="form-row-grid">
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Nazwa talii</label>
+                  <label className="form-label">Deck name</label>
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="Wpisz jeśli brak w danych" 
+                    placeholder="Provide if not in data" 
                     value={importName}
                     onChange={(e) => setImportName(e.target.value)}
                     maxLength={50}
                   />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Opis talii</label>
+                  <label className="form-label">Deck description</label>
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="Wpisz jeśli brak w danych" 
+                    placeholder="Provide if not in data" 
                     value={importDesc}
                     onChange={(e) => setImportDesc(e.target.value)}
                     maxLength={100}
@@ -296,11 +298,11 @@ export function DashboardScreen({
               </div>
 
               <div className="form-group">
-                <label className="form-label">Wklej dane (JSON, CSV, Excel)</label>
+                <label className="form-label">Paste data (JSON, CSV, Excel)</label>
                 <textarea 
                   className="form-input" 
                   style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
-                  placeholder="Wklej tablicę JSON, dane CSV (rozdzielane ;) lub skopiowane kolumny z Excela..."
+                  placeholder="Paste JSON array, CSV data (separated by ;) or copied columns from Excel..."
                   value={importJSON}
                   onChange={(e) => setImportJSON(e.target.value)}
                   required
@@ -314,22 +316,22 @@ export function DashboardScreen({
               )}
 
               <div style={{ marginBottom: '16px' }}>
-                <span className="form-label" style={{ marginBottom: '4px' }}>Dozwolone schematy danych:</span>
+                <span className="form-label" style={{ marginBottom: '4px' }}>Allowed data formats:</span>
                 <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-{`// 1. Zwykły tekst / Excel Copy-Paste / CSV (najbardziej wydajny!)
-Hola;Cześć
-Gracias;Dziękuję
+{`// 1. Plain text / Excel Copy-Paste / CSV (most efficient!)
+Hola;Hello
+Gracias;Thank you
 
-// 2. Kompaktowy JSON (tablica tablic)
+// 2. Compact JSON (array of arrays)
 [
-  ["Hola", "Cześć"],
-  ["Gracias", "Dziękuję"]
+  ["Hola", "Hello"],
+  ["Gracias", "Thank you"]
 ]
 
-// 3. Pełny JSON talii
+// 3. Full Deck JSON
 {
-  "name": "Hiszpański",
-  "cards": [{ "front": "Hola", "back": "Cześć" }]
+  "name": "Spanish",
+  "cards": [{ "front": "Hola", "back": "Hello" }]
 }`}
                 </pre>
               </div>
@@ -341,7 +343,7 @@ Gracias;Dziękuję
                   style={{ width: 'auto' }}
                   onClick={() => setShowImportModal(false)}
                 >
-                  Anuluj
+                  Cancel
                 </button>
                 <button 
                   type="submit" 
@@ -349,7 +351,7 @@ Gracias;Dziękuję
                   style={{ width: 'auto' }}
                   disabled={isImporting}
                 >
-                  {isImporting ? 'Importowanie...' : 'Importuj'}
+                  {isImporting ? 'Importing...' : 'Import'}
                 </button>
               </div>
             </form>

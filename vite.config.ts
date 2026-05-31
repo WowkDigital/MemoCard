@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'MemoCard - Fiszki',
+        name: 'MemoCard - Flashcards',
         short_name: 'MemoCard',
-        description: 'Minimalistyczna aplikacja PWA do nauki słówek metodą powtórek rozłożonych (SRS)',
+        description: 'Minimalist PWA flashcard application with Spaced Repetition System (SRS)',
         theme_color: '#0b0f19',
         background_color: '#0b0f19',
         display: 'standalone',

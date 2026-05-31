@@ -44,7 +44,7 @@ export function useFirestore(userId: string | undefined) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [loadingDecks, setLoadingDecks] = useState(true);
 
-  // 1. Obserwowanie wszystkich talii (własnych i współdzielonych w fazie testowej) w czasie rzeczywistym
+  // 1. Observe all decks (own and shared in testing phase) in real-time
   useEffect(() => {
     if (!userId) {
       setDecks([]);
@@ -52,7 +52,7 @@ export function useFirestore(userId: string | undefined) {
       return;
     }
 
-    // Używamy collectionGroup, by pobrać talie wszystkich użytkowników
+    // We use collectionGroup to fetch decks of all users
     const decksRef = collectionGroup(db, 'decks');
 
     const unsubscribe = onSnapshot(decksRef, (snapshot) => {
@@ -67,17 +67,17 @@ export function useFirestore(userId: string | undefined) {
         };
       }) as Deck[];
 
-      // Filtrujemy duplikaty: jeśli użytkownik ma już sklonowaną talię (własny dokument o tym samym ID),
-      // nie pokazujemy oryginalnej wspólnej wersji
+      // Filter duplicates: if the user has already cloned a deck (their own document with the same ID),
+      // we do not show the original shared version
       const myDeckIds = new Set(allDecks.filter(d => d.ownerId === userId).map(d => d.id));
       
       const filteredDecks = allDecks.filter(deck => {
         if (deck.ownerId === userId) return true;
-        // Pokazuj wspólną talię tylko wtedy, gdy gość/użytkownik nie ma jeszcze jej kopii o tym samym ID
+        // Show shared deck only when guest/user does not have its copy with the same ID yet
         return !myDeckIds.has(deck.id);
       });
 
-      // Sortowanie: najpierw własne, potem wspólne
+      // Sorting: own first, then shared
       filteredDecks.sort((a, b) => {
         if (a.isShared && !b.isShared) return 1;
         if (!a.isShared && b.isShared) return -1;
@@ -94,7 +94,7 @@ export function useFirestore(userId: string | undefined) {
     return unsubscribe;
   }, [userId]);
 
-  // 2. Dodawanie nowej talii
+  // 2. Add new deck
   const addDeck = async (name: string, description: string) => {
     if (!userId) return;
     try {
@@ -111,7 +111,7 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
-  // 3. Usuwanie talii
+  // 3. Delete deck
   const deleteDeck = async (deckId: string) => {
     if (!userId) return;
     try {
@@ -123,25 +123,25 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
-  // 4. Dodawanie nowej karty do talii
+  // 4. Add new card to deck
   const addCard = async (deckId: string, front: string, back: string) => {
     if (!userId) return;
     try {
       const cardsRef = collection(db, 'users', userId, 'decks', deckId, 'cards');
       const now = new Date();
       
-      // Dodaj nową kartę z domyślnymi parametrami SRS
+      // Add new card with default SRS parameters
       await addDoc(cardsRef, {
         front,
         back,
         createdAt: serverTimestamp(),
-        interval: 0, // Gotowa do natychmiastowej powtórki
+        interval: 0, // Ready for immediate review
         easeFactor: 2.5,
         repetitions: 0,
-        nextReview: Timestamp.fromDate(now) // Ustawione na teraz
+        nextReview: Timestamp.fromDate(now) // Set to now
       });
 
-      // Zwiększ licznik kart w talii
+      // Increment card count in the deck
       const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
       await updateDoc(deckDocRef, {
         cardCount: increment(1)
@@ -152,14 +152,14 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
-  // 5. Usuwanie karty z talii
+  // 5. Delete card from deck
   const deleteCard = async (deckId: string, cardId: string) => {
     if (!userId) return;
     try {
       const cardDocRef = doc(db, 'users', userId, 'decks', deckId, 'cards', cardId);
       await deleteDoc(cardDocRef);
 
-      // Zmniejsz licznik kart w talii
+      // Decrement card count in the deck
       const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
       await updateDoc(deckDocRef, {
         cardCount: increment(-1)
@@ -170,7 +170,7 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
-  // 6. Subskrypcja wszystkich kart z danej talii
+  // 6. Subscribe to all cards from a given deck
   const subscribeToCards = (deckId: string, callback: (cards: Card[]) => void) => {
     if (!userId) return () => {};
     const cardsRef = collection(db, 'users', userId, 'decks', deckId, 'cards');
@@ -187,7 +187,7 @@ export function useFirestore(userId: string | undefined) {
     });
   };
 
-  // 7. Aktualizacja parametrów SRS po ocenie fiszki (SuperMemo-2 SM-2)
+  // 7. Update SRS parameters after scoring a card (SuperMemo-2 SM-2)
   // quality: 1 (Again), 3 (Hard), 4 (Good), 5 (Easy)
   const scoreCard = async (deckId: string, cardId: string, currentCard: Card, quality: number) => {
     if (!userId) return;
@@ -197,11 +197,11 @@ export function useFirestore(userId: string | undefined) {
       let nextEaseFactor = currentCard.easeFactor;
 
       if (quality < 4) {
-        // Again lub Hard o niskiej ocenie powoduje reset powtórek
+        // Again or Hard with a low score resets repetitions
         nextRepetitions = 0;
-        nextInterval = 1; // Powtórka jutro
+        nextInterval = 1; // Repeat tomorrow
       } else {
-        // Poprawna odpowiedź (Good lub Easy)
+        // Correct answer (Good or Easy)
         if (nextRepetitions === 0) {
           nextInterval = 1;
         } else if (nextRepetitions === 1) {
@@ -212,13 +212,13 @@ export function useFirestore(userId: string | undefined) {
         nextRepetitions += 1;
       }
 
-      // Aktualizacja czynnika łatwości (easeFactor)
+      // Update easeFactor
       nextEaseFactor = nextEaseFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
       if (nextEaseFactor < 1.3) {
         nextEaseFactor = 1.3;
       }
 
-      // Obliczanie daty następnej powtórki
+      // Calculate next review date
       const now = new Date();
       const nextReviewDate = new Date(now.getTime() + nextInterval * 24 * 60 * 60 * 1000);
       
@@ -235,7 +235,7 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
-  // Importowanie całej talii wraz z kartami
+  // Import entire deck with cards
   const importDeck = async (name: string, description: string, cardsList: { front: string; back: string }[]) => {
     if (!userId) return;
     try {
@@ -270,7 +270,7 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
-  // Importowanie kart do istniejącej talii
+  // Import cards to an existing deck
   const importCards = async (deckId: string, cardsList: { front: string; back: string }[]) => {
     if (!userId) return;
     try {
@@ -302,19 +302,19 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
-  // Klonowanie wspólnej talii i jej kart do konta zalogowanego użytkownika
+  // Clone shared deck and its cards to log in user account
   const cloneSharedDeck = async (sharedOwnerId: string, sharedDeckId: string) => {
     if (!userId) return;
     try {
-      // 1. Pobierz dane oryginalnej talii
+      // 1. Get original deck data
       const sharedDeckDoc = await getDoc(doc(db, 'users', sharedOwnerId, 'decks', sharedDeckId));
       if (!sharedDeckDoc.exists()) return;
       const deckData = sharedDeckDoc.data();
 
-      // 2. Pobierz wszystkie karty z oryginalnej talii
+      // 2. Get all cards from the original deck
       const cardsSnapshot = await getDocs(collection(db, 'users', sharedOwnerId, 'decks', sharedDeckId, 'cards'));
       
-      // 3. Utwórz talię u aktualnego użytkownika z tym samym ID (aby zapobiec ponownemu klonowaniu)
+      // 3. Create deck for the current user with the same ID (to prevent double cloning)
       const newDeckRef = doc(db, 'users', userId, 'decks', sharedDeckId);
       await setDoc(newDeckRef, {
         name: deckData.name,
@@ -323,7 +323,7 @@ export function useFirestore(userId: string | undefined) {
         cardCount: cardsSnapshot.size
       });
 
-      // 4. Skopiuj karty z domyślnym postępem nauki (SRS zresetowane dla tego użytkownika)
+      // 4. Copy cards with default study progress (SRS reset for this user)
       const batch = writeBatch(db);
       const now = new Date();
       cardsSnapshot.docs.forEach((cardDoc) => {

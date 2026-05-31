@@ -420,13 +420,18 @@ body {
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 3D Flip Card Container */
+/* Flat Card Container with Fade Animation and Directional Borders */
+.review-session-container {
+  touch-action: none; /* Prevents viewport scrolling during gesture swiping */
+}
+
 .flashcard-container {
-  perspective: 1000px;
   width: 100%;
   height: 280px;
   margin-bottom: 32px;
   cursor: pointer;
+  position: relative;
+  touch-action: none;
 }
 
 .flashcard-inner {
@@ -434,20 +439,12 @@ body {
   width: 100%;
   height: 100%;
   text-align: center;
-  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-style: preserve-3d;
-}
-
-.flashcard-container.is-flipped .flashcard-inner {
-  transform: rotateY(180deg);
 }
 
 .flashcard-face {
   position: absolute;
   width: 100%;
   height: 100%;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -455,18 +452,66 @@ body {
   padding: 32px;
   border-radius: 24px;
   background: var(--bg-card);
-  border: 1px solid var(--border-light);
   box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.4);
+  transition: opacity 0.15s ease-in-out, visibility 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
 
 .flashcard-front {
   background: linear-gradient(135deg, rgba(20, 29, 48, 0.8) 0%, rgba(17, 24, 39, 0.8) 100%);
+  border: 1px solid var(--border-light);
 }
 
 .flashcard-back {
   background: linear-gradient(135deg, rgba(17, 24, 39, 0.8) 0%, rgba(13, 19, 32, 0.8) 100%);
-  transform: rotateY(180deg);
-  border-color: rgba(99, 102, 241, 0.25);
+  /* Default pale borders in all 4 directions representing SRS ratings */
+  border-left: 4px solid rgba(239, 68, 68, 0.15);   /* Again - Red */
+  border-right: 4px solid rgba(59, 130, 246, 0.15);  /* Good - Blue */
+  border-top: 4px solid rgba(16, 185, 129, 0.15);   /* Easy - Green */
+  border-bottom: 4px solid rgba(245, 158, 11, 0.15); /* Hard - Orange */
+}
+
+/* Visibility toggling with fast fade */
+.flashcard-container:not(.is-flipped) .flashcard-front {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.flashcard-container:not(.is-flipped) .flashcard-back {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.flashcard-container.is-flipped .flashcard-front {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.flashcard-container.is-flipped .flashcard-back {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Highlight borders on gesture swiping */
+.flashcard-container.is-flipped.swipe-active-left .flashcard-back {
+  border-left-color: var(--color-again);
+  box-shadow: -8px 0 20px rgba(239, 68, 68, 0.25), 0 10px 40px 0 rgba(0, 0, 0, 0.5);
+}
+
+.flashcard-container.is-flipped.swipe-active-right .flashcard-back {
+  border-right-color: var(--color-good);
+  box-shadow: 8px 0 20px rgba(59, 130, 246, 0.25), 0 10px 40px 0 rgba(0, 0, 0, 0.5);
+}
+
+.flashcard-container.is-flipped.swipe-active-up .flashcard-back {
+  border-top-color: var(--color-easy);
+  box-shadow: 0 -8px 20px rgba(16, 185, 129, 0.25), 0 10px 40px 0 rgba(0, 0, 0, 0.5);
+}
+
+.flashcard-container.is-flipped.swipe-active-down .flashcard-back {
+  border-bottom-color: var(--color-hard);
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.25), 0 10px 40px 0 rgba(0, 0, 0, 0.5);
 }
 
 .flashcard-side-label {

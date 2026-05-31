@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, CheckCircle, RefreshCw, Eye, Sparkles } from 'lucide-react';
+import { ArrowLeft, CheckCircle, RefreshCw } from 'lucide-react';
 import type { Deck, Card } from '../hooks/useFirestore';
 
 interface ReviewScreenProps {
@@ -17,7 +17,7 @@ export function ReviewScreen({
 }: ReviewScreenProps) {
   const [loading, setLoading] = useState(true);
   
-  // Kolejka kart w bieżącej sesji nauki
+  // Session queue for review cards
   const [sessionQueue, setSessionQueue] = useState<Card[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -26,19 +26,25 @@ export function ReviewScreen({
   const currentCard = sessionQueue[currentIndex];
   const isFinished = !currentCard || currentIndex >= sessionQueue.length;
 
-  // Gesty dotykowe na telefonach
+  // Touch gestures for mobile
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [touchCurrent, setTouchCurrent] = useState<{ x: number; y: number } | null>(null);
   const [isSwiping, setIsSwiping] = useState(false);
   const dragOccurred = useRef(false);
 
-  // Sterowanie klawiaturą na desktopie
+  // Keyboard navigation states
   const [keyboardSwipeDirection, setKeyboardSwipeDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    // Gesty aktywne tylko gdy karta jest odwrócona (pokazuje odpowiedź)
+    // Gestures are only active when card is flipped (showing answer)
     if (!isFlipped) return;
     
+    // Check if the touch is on standard buttons to avoid overriding button clicks
+    const target = e.target as HTMLElement;
+    if (target.closest('.back-link') || target.closest('.btn') || target.closest('.btn-score')) {
+      return;
+    }
+
     const touch = e.touches[0];
     setTouchStart({ x: touch.clientX, y: touch.clientY });
     setTouchCurrent({ x: touch.clientX, y: touch.clientY });
@@ -67,15 +73,15 @@ export function ReviewScreen({
 
     const diffX = touchCurrent.x - touchStart.x;
     const diffY = touchCurrent.y - touchStart.y;
-    const threshold = 100; // minimalne przesunięcie w pikselach (zwiększona odporność na fałszywe przesunięcia)
+    const threshold = 80; // Minimal swipe distance in pixels
 
     if (Math.abs(diffX) > Math.abs(diffY)) {
-      // Swipe poziomy
+      // Horizontal swipe
       if (Math.abs(diffX) > threshold) {
         if (diffX > 0) {
-          handleScore(4); // W prawo -> Dobrze (4)
+          handleScore(4); // Swipe Right -> Good (4)
         } else {
-          handleScore(1); // W lewo -> Znowu (1)
+          handleScore(1); // Swipe Left -> Again (1)
         }
         resetSwipeState();
         setTimeout(() => {
@@ -84,12 +90,12 @@ export function ReviewScreen({
         return;
       }
     } else {
-      // Swipe pionowy
+      // Vertical swipe
       if (Math.abs(diffY) > threshold) {
         if (diffY > 0) {
-          handleScore(3); // W dół -> Trudno (3)
+          handleScore(3); // Swipe Down -> Hard (3)
         } else {
-          handleScore(5); // W górę -> Łatwo (5)
+          handleScore(5); // Swipe Up -> Easy (5)
         }
         resetSwipeState();
         setTimeout(() => {
@@ -111,94 +117,53 @@ export function ReviewScreen({
     setIsSwiping(false);
   };
 
-  const handleCardClick = () => {
+  const handleCardClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (dragOccurred.current) {
-      return; // Zablokuj obrót, jeśli intencją było przesunięcie
+      return; // Prevent flip if they were swiping
     }
     setIsFlipped(!isFlipped);
   };
 
   const handleContainerClick = (e: React.MouseEvent) => {
-    // Jeśli karta jest już odwrócona, ignorujemy kliknięcia na tło
+    // If the card is already flipped, click on background does nothing
     if (isFlipped) return;
     
-    // Ignoruj kliknięcia w przyciski sterujące
+    // Ignore clicks on links/buttons
     const target = e.target as HTMLElement;
     if (target.closest('.back-link') || target.closest('.btn-secondary') || target.closest('.btn-primary')) return;
 
     setIsFlipped(true);
   };
 
-  const getCardStyle = () => {
-    if (keyboardSwipeDirection) {
-      let transform = '';
-      if (keyboardSwipeDirection === 'left') transform = 'translate3d(-180px, 0, 0) rotate(-12deg)';
-      else if (keyboardSwipeDirection === 'right') transform = 'translate3d(180px, 0, 0) rotate(12deg)';
-      else if (keyboardSwipeDirection === 'up') transform = 'translate3d(0, -180px, 0)';
-      else if (keyboardSwipeDirection === 'down') transform = 'translate3d(0, 180px, 0)';
-
-      return {
-        transform,
-        transition: 'transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-      };
-    }
-
-    if (!touchStart || !touchCurrent || !isSwiping) {
-      return {
-        transition: 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-      };
-    }
-
-    const diffX = touchCurrent.x - touchStart.x;
-    const diffY = touchCurrent.y - touchStart.y;
-    const rotate = diffX * 0.08; // Delikatna rotacja przy przesuwaniu
-
-    return {
-      transform: `translate3d(${diffX}px, ${diffY}px, 0) rotate(${rotate}deg)`,
-      transition: 'none',
-      cursor: 'grabbing',
-      touchAction: 'none' // Zapobiega przewijaniu strony na telefonach podczas gestu
-    };
-  };
-
-  const getOverlayLabel = () => {
-    if (keyboardSwipeDirection) {
-      if (keyboardSwipeDirection === 'left') return { text: 'Znowu', color: '#ef4444' };
-      if (keyboardSwipeDirection === 'right') return { text: 'Dobrze', color: '#3b82f6' };
-      if (keyboardSwipeDirection === 'up') return { text: 'Łatwo', color: '#10b981' };
-      if (keyboardSwipeDirection === 'down') return { text: 'Trudno', color: '#f59e0b' };
-    }
-
+  // Determine which border direction is active to highlight it
+  const getActiveDirection = (): 'left' | 'right' | 'up' | 'down' | null => {
+    if (keyboardSwipeDirection) return keyboardSwipeDirection;
     if (!touchStart || !touchCurrent || !isSwiping) return null;
 
     const diffX = touchCurrent.x - touchStart.x;
     const diffY = touchCurrent.y - touchStart.y;
-    const threshold = 30; // Próg od którego wyświetlamy etykietę gestu
+    const threshold = 30; // Threshold from which we start highlighting borders
 
     if (Math.abs(diffX) > Math.abs(diffY)) {
       if (Math.abs(diffX) > threshold) {
-        return diffX > 0
-          ? { text: 'Dobrze', color: '#3b82f6' } // Niebieski (zgodnie z przyciskiem Dobrze)
-          : { text: 'Znowu', color: '#ef4444' }; // Czerwony (zgodnie z przyciskiem Znowu)
+        return diffX > 0 ? 'right' : 'left';
       }
     } else {
       if (Math.abs(diffY) > threshold) {
-        return diffY > 0
-          ? { text: 'Trudno', color: '#f59e0b' } // Pomarańczowy (zgodnie z przyciskiem Trudno)
-          : { text: 'Łatwo', color: '#10b981' }; // Zielony (zgodnie z przyciskiem Łatwo)
+        return diffY > 0 ? 'down' : 'up';
       }
     }
     return null;
   };
 
-  const overlay = getOverlayLabel();
+  const activeDirection = getActiveDirection();
 
-  // Bindowanie klawiatury (strzałki na desktopie)
+  // Keyboard controls for review (Arrow keys)
   useEffect(() => {
     if (loading || isFinished) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignorujemy skróty, jeśli użytkownik pisze w formularzu
       const activeElement = document.activeElement as HTMLElement;
       if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
         return;
@@ -210,11 +175,10 @@ export function ReviewScreen({
       e.preventDefault();
 
       if (!isFlipped) {
-        // Pierwsze kliknięcie dowolnej strzałki pokazuje odpowiedź
+        // Any arrow key flips/reveals the card first
         setIsFlipped(true);
       } else {
-        // Drugie kliknięcie ocenia trudność
-        if (keyboardSwipeDirection) return; // Ochrona przed podwójnym wywołaniem
+        if (keyboardSwipeDirection) return; // Prevent double trigger
 
         let score = 4;
         let direction: 'left' | 'right' | 'up' | 'down' = 'right';
@@ -235,11 +199,11 @@ export function ReviewScreen({
 
         setKeyboardSwipeDirection(direction);
 
-        // Wywołujemy ocenę po krótkiej animacji wysunięcia
+        // Score card after a brief visual delay to show the border highlight
         setTimeout(() => {
           handleScore(score);
           setKeyboardSwipeDirection(null);
-        }, 200);
+        }, 250);
       }
     };
 
@@ -249,23 +213,20 @@ export function ReviewScreen({
     };
   }, [isFlipped, currentIndex, loading, isFinished, keyboardSwipeDirection]);
 
-  // Pobranie i filtrowanie kart do powtórki
+  // Load and shuffle cards
   useEffect(() => {
     const unsubscribe = subscribeToCards(deck.id, (loadedCards) => {
-      
-      // Filtrujemy tylko karty, których termin powtórki minął lub jest dzisiaj
       const now = new Date();
+      // Filter cards that are due for review
       const due = loadedCards.filter(card => {
         if (!card.nextReview) return true;
-        // Konwersja Firestore Timestamp na JS Date
         const reviewDate = card.nextReview.toDate();
         return reviewDate <= now;
       });
 
-      // Tasowanie kart (dla lepszego efektu nauki)
+      // Shuffle due cards
       const shuffledDue = [...due].sort(() => Math.random() - 0.5);
 
-      // Inicjalizujemy kolejkę tylko przy pierwszym ładowaniu
       if (loading) {
         setSessionQueue(shuffledDue);
         setLoading(false);
@@ -278,22 +239,20 @@ export function ReviewScreen({
   const handleScore = async (quality: number) => {
     if (!currentCard) return;
 
-    // Bezwarunkowe zresetowanie stanu przeciągania przy ocenie
     dragOccurred.current = false;
 
-    // Przekazanie oceny do bazy danych
+    // Persist card score to database
     await scoreCard(deck.id, currentCard.id, currentCard, quality);
 
-    // Obróć kartę z powrotem na front
+    // Flip card back to front
     setIsFlipped(false);
 
-    // Krótkie opóźnienie przed załadowaniem kolejnej, aby animacja obrotu zdążyła się zresetować
+    // Brief delay to allow the fade transition to reset before showing next card
     setTimeout(() => {
       if (quality < 4) {
-        // Jeśli zła ocena (Again / Hard) - dorzucamy kopię karty na koniec kolejki sesji
+        // If wrong or hard answer, put the card at the end of the current session queue
         setSessionQueue(prev => [...prev, currentCard]);
       } else {
-        // Zwiększamy liczbę poprawnie zaliczonych w tej sesji
         setCompletedCount(prev => prev + 1);
       }
       
@@ -316,9 +275,6 @@ export function ReviewScreen({
     );
   }
 
-  // Stan zakończenia sesji
-
-
   return (
     <div 
       className="container"
@@ -329,7 +285,7 @@ export function ReviewScreen({
       <div className="navigation-bar">
         <button className="back-link" onClick={(e) => { e.stopPropagation(); onBack(); }}>
           <ArrowLeft size={16} />
-          <span>Zakończ sesję</span>
+          <span>End Session</span>
         </button>
       </div>
 
@@ -338,26 +294,32 @@ export function ReviewScreen({
           <div className="brand-icon" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', margin: '0 auto 24px' }}>
             <CheckCircle size={40} />
           </div>
-          <h2 className="login-title" style={{ fontSize: '1.8rem', marginBottom: '8px' }}>Świetna robota!</h2>
+          <h2 className="login-title" style={{ fontSize: '1.8rem', marginBottom: '8px' }}>Great Job!</h2>
           <p className="login-subtitle" style={{ marginBottom: '24px' }}>
-            Wszystkie zaplanowane powtórki dla talii <strong>{deck.name}</strong> zostały zakończone na dziś.
+            All scheduled reviews for the deck <strong>{deck.name}</strong> have been completed for today.
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', width: '100%', maxWidth: '320px' }}>
             <button className="btn btn-secondary" onClick={onBack}>
-              Wróć do talii
+              Back to Decks
             </button>
             <button className="btn btn-primary" onClick={handleResetSession}>
               <RefreshCw size={16} />
-              Ucz się ponownie
+              Study Again
             </button>
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div 
+          className="review-session-container"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ display: 'flex', flexDirection: 'column', flex: 1 }}
+        >
           {/* Progress Indicator */}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-            <span>Sesja powtórek: {completedCount} ukończonych</span>
-            <span>Pozostało: {sessionQueue.length - currentIndex} fiszek</span>
+            <span>Review Session: {completedCount} completed</span>
+            <span>Remaining: {sessionQueue.length - currentIndex} {sessionQueue.length - currentIndex === 1 ? 'card' : 'cards'}</span>
           </div>
           
           <div className="progress-bar-container">
@@ -369,47 +331,18 @@ export function ReviewScreen({
 
           {/* Flashcard Component */}
           <div 
-            className={`flashcard-container ${isFlipped ? 'is-flipped' : ''}`}
-            style={getCardStyle()}
+            className={`flashcard-container ${isFlipped ? 'is-flipped' : ''} ${activeDirection ? `swipe-active-${activeDirection}` : ''}`}
             onClick={handleCardClick}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
           >
-            {overlay && (
-              <div 
-                className="swipe-overlay-indicator"
-                style={{ 
-                  color: overlay.color, 
-                  borderColor: overlay.color,
-                  backgroundColor: `rgba(${
-                    overlay.color === '#10b981' ? '16,185,129' : 
-                    overlay.color === '#ef4444' ? '239,68,68' : 
-                    overlay.color === '#f59e0b' ? '245,158,11' : 
-                    '59,130,246'
-                  }, 0.15)`
-                }}
-              >
-                {overlay.text}
-              </div>
-            )}
             <div className="flashcard-inner">
               {/* Front Face */}
               <div className="flashcard-face flashcard-front">
-                <span className="flashcard-side-label">Pytanie / Awers</span>
                 <span className="flashcard-text">{currentCard.front}</span>
-                <span className="flashcard-hint">
-                  <Eye size={14} /> Kliknij gdziekolwiek, aby zobaczyć odpowiedź
-                </span>
               </div>
               
               {/* Back Face */}
               <div className="flashcard-face flashcard-back">
-                <span className="flashcard-side-label">Odpowiedź / Rewers</span>
                 <span className="flashcard-text">{currentCard.back}</span>
-                <span className="flashcard-hint">
-                  <Sparkles size={14} /> Wybierz poziom poniżej lub przesuń palcem (⬅️/⬇️/➡️/⬆️)
-                </span>
               </div>
             </div>
           </div>
@@ -417,29 +350,29 @@ export function ReviewScreen({
           {/* Action Grid */}
           {!isFlipped ? (
             <div className="review-actions-prompt">
-              Kliknij w dowolnym miejscu na ekranie, aby pokazać odpowiedź.
+              Tap anywhere on the screen to show answer.
             </div>
           ) : (
             <div className="animate-fade-in">
               <div style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                Jak dobrze pamiętałeś tę fiszkę?
+                How well did you remember this card?
               </div>
               <div className="score-buttons-grid">
                 <button className="btn-score btn-again" onClick={() => handleScore(1)}>
-                  <strong>Znowu</strong>
-                  <span className="score-label">Reset<span className="shortcut-hint"> (⬅️ w lewo)</span></span>
+                  <strong>Again</strong>
+                  <span className="score-label">Reset<span className="shortcut-hint"> (⬅️ left)</span></span>
                 </button>
                 <button className="btn-score btn-hard" onClick={() => handleScore(3)}>
-                  <strong>Trudno</strong>
-                  <span className="score-label">Trudna<span className="shortcut-hint"> (⬇️ w dół)</span></span>
+                  <strong>Hard</strong>
+                  <span className="score-label">Hard<span className="shortcut-hint"> (⬇️ down)</span></span>
                 </button>
                 <button className="btn-score btn-good" onClick={() => handleScore(4)}>
-                  <strong>Dobrze</strong>
-                  <span className="score-label">Średnia<span className="shortcut-hint"> (➡️ w prawo)</span></span>
+                  <strong>Good</strong>
+                  <span className="score-label">Good<span className="shortcut-hint"> (➡️ right)</span></span>
                 </button>
                 <button className="btn-score btn-easy" onClick={() => handleScore(5)}>
-                  <strong>Łatwo</strong>
-                  <span className="score-label">Szybka<span className="shortcut-hint"> (⬆️ w górę)</span></span>
+                  <strong>Easy</strong>
+                  <span className="score-label">Easy<span className="shortcut-hint"> (⬆️ up)</span></span>
                 </button>
               </div>
             </div>

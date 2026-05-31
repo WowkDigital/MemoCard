@@ -10,49 +10,49 @@ export interface ParsedCard {
 export function parseImportData(rawText: string): ParsedCard[] {
   const trimmed = rawText.trim();
   if (!trimmed) {
-    throw new Error("Wklejona zawartość jest pusta.");
+    throw new Error("Pasted content is empty.");
   }
 
-  // 1. Spróbuj sparsować jako JSON
+  // 1. Try to parse as JSON
   if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
     try {
       const parsed = JSON.parse(trimmed);
 
-      // A. Obiekt z kluczem cards (np. pełna talia)
+      // A. Object with cards key (e.g. full deck)
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         if (Array.isArray(parsed.cards)) {
           return parseJsonArray(parsed.cards);
         }
-        throw new Error("Obiekt JSON musi zawierać tablicę 'cards'.");
+        throw new Error("JSON object must contain a 'cards' array.");
       }
 
-      // B. Bezpośrednia tablica
+      // B. Direct array
       if (Array.isArray(parsed)) {
         return parseJsonArray(parsed);
       }
     } catch (err: any) {
-      // Jeśli zaczynało się od JSONowych znaków, ale się nie sparsowało, zgłoś błąd parsowania JSON
+      // If it started with JSON syntax but failed to parse, report JSON syntax error
       if (err.message && err.message.includes("JSON")) {
-        throw new Error(`Błąd składni JSON: ${err.message}`);
+        throw new Error(`JSON syntax error: ${err.message}`);
       }
       throw err;
     }
   }
 
-  // 2. Jeśli to nie JSON, parsujemy jako CSV / TSV / Tekst rozdzielany
+  // 2. If it's not JSON, parse as CSV / TSV / Separated text
   return parsePlainText(trimmed);
 }
 
 function parseJsonArray(arr: any[]): ParsedCard[] {
   if (arr.length === 0) {
-    throw new Error("Tablica danych jest pusta.");
+    throw new Error("Data array is empty.");
   }
 
   return arr.map((item, index) => {
-    // Sprawdzenie tablicy dwuelementowej: ["awers", "rewers"] (Kompaktowy JSON)
+    // Check for two-element array: ["front", "back"] (Compact JSON)
     if (Array.isArray(item)) {
       if (item.length < 2) {
-        throw new Error(`Karta na indeksie ${index} w JSON musi mieć awers i rewers: ${JSON.stringify(item)}`);
+        throw new Error(`Card at index ${index} in JSON must have front and back: ${JSON.stringify(item)}`);
       }
       return {
         front: String(item[0]).trim(),
@@ -60,13 +60,13 @@ function parseJsonArray(arr: any[]): ParsedCard[] {
       };
     }
 
-    // Sprawdzenie obiektu: { front: "...", back: "..." }
+    // Check for object: { front: "...", back: "..." }
     if (item && typeof item === "object") {
       const front = item.front || item.awers || item.q;
       const back = item.back || item.rewers || item.a;
 
       if (!front || !back) {
-        throw new Error(`Karta na indeksie ${index} w JSON musi mieć pola 'front'/'back' (lub 'awers'/'rewers'): ${JSON.stringify(item)}`);
+        throw new Error(`Card at index ${index} in JSON must have 'front' and 'back' fields: ${JSON.stringify(item)}`);
       }
 
       return {
@@ -75,7 +75,7 @@ function parseJsonArray(arr: any[]): ParsedCard[] {
       };
     }
 
-    throw new Error(`Niepoprawny typ elementu na indeksie ${index} w JSON.`);
+    throw new Error(`Invalid element type at index ${index} in JSON.`);
   });
 }
 
@@ -85,9 +85,9 @@ function parsePlainText(text: string): ParsedCard[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (!line) continue; // Pomiń puste linie
+    if (!line) continue; // Skip empty lines
 
-    // Wykrywanie separatora w kolejności priorytetu: Tabulator (\t), Średnik (;), Pionowa kreska (|)
+    // Detect separator in priority order: Tab (\t), Semicolon (;), Pipe (|)
     let separator = "";
     if (line.includes("\t")) {
       separator = "\t";
@@ -98,27 +98,27 @@ function parsePlainText(text: string): ParsedCard[] {
     }
 
     if (!separator) {
-      throw new Error(`Linia ${i + 1} nie zawiera poprawnego separatora (użyj tabulatora, średnika ';' lub kreski '|'): "${line}"`);
+      throw new Error(`Line ${i + 1} does not contain a valid separator (use tab, semicolon ';' or pipe '|'): "${line}"`);
     }
 
     const parts = line.split(separator);
     if (parts.length < 2) {
-      throw new Error(`Linia ${i + 1} musi posiadać zarówno awers jak i rewers rozdzielone znakiem '${separator}'.`);
+      throw new Error(`Line ${i + 1} must have both front and back separated by '${separator}'.`);
     }
 
     const front = parts[0].trim();
-    // Połącz pozostałe części na wypadek gdyby separator występował w odpowiedzi
+    // Join remaining parts in case the separator is inside the back text
     const back = parts.slice(1).join(separator).trim();
 
     if (!front || !back) {
-      throw new Error(`Linia ${i + 1} zawiera pusty awers lub rewers.`);
+      throw new Error(`Line ${i + 1} contains empty front or back.`);
     }
 
     cards.push({ front, back });
   }
 
   if (cards.length === 0) {
-    throw new Error("Nie znaleziono żadnych poprawnych linii z fiszkami.");
+    throw new Error("No valid flashcard lines found.");
   }
 
   return cards;

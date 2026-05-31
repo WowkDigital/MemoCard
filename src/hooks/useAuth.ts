@@ -15,6 +15,7 @@ export function useAuth() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Listen for authentication state changes
     const unsubscribe = onAuthStateChanged(auth, 
       (currentUser) => {
         setUser(currentUser);
@@ -31,6 +32,7 @@ export function useAuth() {
     return unsubscribe;
   }, []);
 
+  // Sign in using Google OAuth Popup
   const loginWithGoogle = async () => {
     setLoading(true);
     setError(null);
@@ -44,6 +46,7 @@ export function useAuth() {
     }
   };
 
+  // Sign in as a guest (anonymous authentication)
   const loginAnonymously = async () => {
     setLoading(true);
     setError(null);
@@ -56,6 +59,7 @@ export function useAuth() {
     }
   };
 
+  // Log out current user
   const logout = async () => {
     setLoading(true);
     setError(null);

@@ -17,12 +17,12 @@ export function LoginScreen({ onLoginGoogle, onLoginAnonymous, loading, error }:
         
         <h1 className="login-title">MemoCard</h1>
         <p className="login-subtitle">
-          Minimalistyczna aplikacja do nauki słówek metodą powtórek rozłożonych (SRS). Ucz się efektywnie, gdziekolwiek jesteś.
+          Minimalist flashcard application utilizing the Spaced Repetition System (SRS). Learn efficiently, wherever you are.
         </p>
 
         {error && (
           <div className="btn btn-danger" style={{ marginBottom: '20px', cursor: 'default' }}>
-            <span>Błąd: {error}</span>
+            <span>Error: {error}</span>
           </div>
         )}
 
@@ -33,7 +33,7 @@ export function LoginScreen({ onLoginGoogle, onLoginAnonymous, loading, error }:
             disabled={loading}
           >
             <LogIn size={20} />
-            {loading ? 'Logowanie...' : 'Zaloguj przez Google'}
+            {loading ? 'Logging in...' : 'Sign in with Google'}
           </button>
           
           <button 
@@ -42,7 +42,7 @@ export function LoginScreen({ onLoginGoogle, onLoginAnonymous, loading, error }:
             disabled={loading}
           >
             <Sparkles size={20} />
-            Wypróbuj bez logowania
+            Try as Guest
           </button>
         </div>
       </div>

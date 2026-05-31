@@ -30,13 +30,13 @@ export function DeckManageScreen({
   const [isAdding, setIsAdding] = useState(false);
   const [showConfirmDeleteDeck, setShowConfirmDeleteDeck] = useState(false);
 
-  // Stan importu JSON
+  // JSON import states
   const [showImportMode, setShowImportMode] = useState(false);
   const [importJSON, setImportJSON] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  // Zapis do subskrypcji kart
+  // Subscribe to deck's cards
   useEffect(() => {
     const unsubscribe = subscribeToCards(deck.id, (loadedCards) => {
       setCards(loadedCards);
@@ -76,7 +76,7 @@ export function DeckManageScreen({
       setShowImportMode(false);
     } catch (err: any) {
       console.error(err);
-      setImportError(err.message || 'Niepoprawny format danych.');
+      setImportError(err.message || 'Invalid data format.');
     } finally {
       setIsImporting(false);
     }
@@ -88,7 +88,7 @@ export function DeckManageScreen({
       <div className="navigation-bar">
         <button className="back-link" onClick={onBack}>
           <ArrowLeft size={16} />
-          <span>Powrót do pulpitów</span>
+          <span>Back to Dashboard</span>
         </button>
       </div>
 
@@ -109,7 +109,7 @@ export function DeckManageScreen({
       <div className="glass" style={{ padding: '20px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.1rem' }}>
-            {showImportMode ? 'Importuj fiszki z JSON' : 'Dodaj nową fiszkę'}
+            {showImportMode ? 'Import flashcards from JSON' : 'Add new flashcard'}
           </h3>
           <button 
             className="btn btn-secondary" 
@@ -119,7 +119,7 @@ export function DeckManageScreen({
               setImportError(null);
             }}
           >
-            {showImportMode ? 'Ręczne dodawanie' : 'Importuj z JSON'}
+            {showImportMode ? 'Manual Entry' : 'Import from JSON'}
           </button>
         </div>
 
@@ -127,11 +127,11 @@ export function DeckManageScreen({
           <form onSubmit={handleAddCardSubmit}>
             <div className="form-row-grid">
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontSize: '0.8rem' }}>Awers (front)</label>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Front</label>
                 <input 
                   type="text" 
                   className="form-input" 
-                  placeholder="np. Hello" 
+                  placeholder="e.g. Hello" 
                   value={front}
                   onChange={(e) => setFront(e.target.value)}
                   required
@@ -139,11 +139,11 @@ export function DeckManageScreen({
                 />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontSize: '0.8rem' }}>Rewers (back)</label>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Back</label>
                 <input 
                   type="text" 
                   className="form-input" 
-                  placeholder="np. Cześć" 
+                  placeholder="e.g. Cześć" 
                   value={back}
                   onChange={(e) => setBack(e.target.value)}
                   required
@@ -158,17 +158,17 @@ export function DeckManageScreen({
               disabled={isAdding}
             >
               <Plus size={16} />
-              {isAdding ? 'Dodawanie...' : 'Dodaj Fiszkę'}
+              {isAdding ? 'Adding...' : 'Add Flashcard'}
             </button>
           </form>
         ) : (
           <form onSubmit={handleImportSubmit}>
             <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.8rem' }}>Wklej dane (JSON, CSV, Excel)</label>
+              <label className="form-label" style={{ fontSize: '0.8rem' }}>Paste data (JSON, CSV, Excel)</label>
               <textarea 
                 className="form-input" 
                 style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
-                placeholder="Wklej tablicę JSON, dane CSV (rozdzielane ;) lub skopiowane kolumny z Excela..."
+                placeholder="Paste JSON array, CSV data (separated by ;) or copied columns from Excel..."
                 value={importJSON}
                 onChange={(e) => setImportJSON(e.target.value)}
                 required
@@ -182,13 +182,13 @@ export function DeckManageScreen({
             )}
 
             <div style={{ marginBottom: '16px' }}>
-              <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Przykłady wydajnych formatów:</span>
+              <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Examples of efficient formats:</span>
               <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-{`// 1. Zwykły tekst / Excel / CSV (Zalecane — najszybsze)
+{`// 1. Plain text / Excel / CSV (Recommended — fastest)
 Hello;Cześć
 Goodbye;Do widzenia
 
-// 2. Kompaktowy JSON (bez powtarzania kluczy)
+// 2. Compact JSON (without repeating keys)
 [
   ["Hello", "Cześć"],
   ["Goodbye", "Do widzenia"]
@@ -202,7 +202,7 @@ Goodbye;Do widzenia
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
               disabled={isImporting}
             >
-              {isImporting ? 'Importowanie...' : 'Rozpocznij import'}
+              {isImporting ? 'Importing...' : 'Start Import'}
             </button>
           </form>
         )}
@@ -210,7 +210,7 @@ Goodbye;Do widzenia
 
       {/* Cards List Section */}
       <div className="section-title">
-        <h2>Zawartość Talii ({cards.length} kart)</h2>
+        <h2>Deck Contents ({cards.length} {cards.length === 1 ? 'card' : 'cards'})</h2>
       </div>
 
       {loadingCards ? (
@@ -218,7 +218,7 @@ Goodbye;Do widzenia
       ) : cards.length === 0 ? (
         <div className="empty-state glass">
           <AlertCircle size={40} className="empty-icon" />
-          <p className="empty-text">Talia jest pusta. Dodaj fiszki powyżej, aby rozpocząć.</p>
+          <p className="empty-text">The deck is empty. Add flashcards above to start.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '32px' }}>
@@ -228,13 +228,13 @@ Goodbye;Do widzenia
                 <span className="card-item-front">{card.front}</span>
                 <span className="card-item-back">{card.back}</span>
                 <span className="card-item-meta">
-                  Powtórki: {card.repetitions} | Łatwość: {card.easeFactor} | Odstęp: {card.interval}d
+                  Repetitions: {card.repetitions} | Ease: {card.easeFactor} | Interval: {card.interval}d
                 </span>
               </div>
               <button 
                 className="delete-icon-btn" 
                 onClick={() => onDeleteCard(card.id)}
-                title="Usuń fiszkę"
+                title="Delete flashcard"
               >
                 <Trash2 size={16} />
               </button>
@@ -245,7 +245,7 @@ Goodbye;Do widzenia
 
       {/* Danger Zone: Delete Deck */}
       <div className="glass" style={{ padding: '20px', border: '1px dashed rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.02)' }}>
-        <h3 style={{ color: 'var(--color-again)', marginBottom: '12px', fontSize: '1.1rem' }}>Strefa Niebezpieczna</h3>
+        <h3 style={{ color: 'var(--color-again)', marginBottom: '12px', fontSize: '1.1rem' }}>Danger Zone</h3>
         {!showConfirmDeleteDeck ? (
           <button 
             className="btn btn-danger" 
@@ -253,12 +253,12 @@ Goodbye;Do widzenia
             onClick={() => setShowConfirmDeleteDeck(true)}
           >
             <Trash2 size={16} />
-            Usuń talię i wszystkie karty
+            Delete deck and all cards
           </button>
         ) : (
           <div>
             <p style={{ fontSize: '0.9rem', marginBottom: '16px', color: 'var(--text-secondary)' }}>
-              Czy na pewno chcesz bezpowrotnie usunąć tę talię oraz wszystkie jej fiszki?
+              Are you sure you want to permanently delete this deck and all of its flashcards?
             </p>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button 
@@ -266,14 +266,14 @@ Goodbye;Do widzenia
                 style={{ width: 'auto' }}
                 onClick={() => setShowConfirmDeleteDeck(false)}
               >
-                Anuluj
+                Cancel
               </button>
               <button 
                 className="btn btn-danger" 
                 style={{ width: 'auto' }}
                 onClick={onDeleteDeck}
               >
-                Tak, usuń talię
+                Yes, delete deck
               </button>
             </div>
           </div>
