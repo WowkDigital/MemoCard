@@ -11,28 +11,27 @@ import {
   Clock, 
   TrendingUp 
 } from 'lucide-react';
+import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
+import type { User } from 'firebase/auth';
 import { parseImportData } from '../utils/importParser';
 
 interface DeckManageScreenProps {
+  user: User;
   deck: Deck;
   onBack: () => void;
-  onAddCard: (front: string, back: string) => Promise<void>;
-  onImportCards: (cardsList: { front: string; back: string }[]) => Promise<void>;
-  onDeleteCard: (cardId: string) => Promise<void>;
-  onDeleteDeck: () => Promise<void>;
-  subscribeToCards: (deckId: string, callback: (cards: Card[]) => void) => () => void;
+  onDeleteDeckSuccess: () => void;
+  showToast: (message: string, type: 'success' | 'error') => void;
 }
 
 export function DeckManageScreen({
+  user,
   deck,
   onBack,
-  onAddCard,
-  onImportCards,
-  onDeleteCard,
-  onDeleteDeck,
-  subscribeToCards
+  onDeleteDeckSuccess,
+  showToast
 }: DeckManageScreenProps) {
+  const { addCard, deleteCard, importCards, deleteDeck, subscribeToCards } = useFirestore(user.uid);
   const [cards, setCards] = useState<Card[]>([]);
   const [loadingCards, setLoadingCards] = useState(true);
   
@@ -154,17 +153,39 @@ export function DeckManageScreen({
     return d.toLocaleDateString(undefined, { weekday: 'short' });
   };
 
+  const handleDeleteCard = async (cardId: string) => {
+    try {
+      await deleteCard(deck.id, cardId);
+      showToast('Card deleted.', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to delete card.', 'error');
+    }
+  };
+
+  const handleDeleteDeckClick = async () => {
+    try {
+      await deleteDeck(deck.id);
+      onDeleteDeckSuccess();
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to delete deck.', 'error');
+    }
+  };
+
   const handleAddCardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!front.trim() || !back.trim()) return;
 
     setIsAdding(true);
     try {
-      await onAddCard(front.trim(), back.trim());
+      await addCard(deck.id, front.trim(), back.trim());
+      showToast('Card added!', 'success');
       setFront('');
       setBack('');
     } catch (err) {
       console.error(err);
+      showToast('Failed to add card.', 'error');
     } finally {
       setIsAdding(false);
     }
@@ -180,12 +201,14 @@ export function DeckManageScreen({
     setIsImporting(true);
     try {
       const parsedCards = parseImportData(text);
-      await onImportCards(parsedCards);
+      await importCards(deck.id, parsedCards);
+      showToast(`${parsedCards.length} cards imported!`, 'success');
       setImportJSON('');
       setShowImportMode(false);
     } catch (err: any) {
       console.error(err);
       setImportError(err.message || 'Invalid data format.');
+      showToast('Import failed.', 'error');
     } finally {
       setIsImporting(false);
     }
@@ -362,7 +385,7 @@ Goodbye;Do widzenia
                   </div>
                   <button 
                     className="delete-icon-btn" 
-                    onClick={() => onDeleteCard(card.id)}
+                    onClick={() => handleDeleteCard(card.id)}
                     title="Delete flashcard"
                   >
                     <Trash2 size={16} />
@@ -400,7 +423,7 @@ Goodbye;Do widzenia
                   <button 
                     className="btn btn-danger" 
                     style={{ width: 'auto' }}
-                    onClick={onDeleteDeck}
+                    onClick={handleDeleteDeckClick}
                   >
                     Yes, delete deck
                   </button>

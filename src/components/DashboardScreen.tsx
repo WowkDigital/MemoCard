@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon } from 'lucide-react';
+import { useFirestore } from '../hooks/useFirestore';
 import type { Deck } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
 import { parseImportData } from '../utils/importParser';
@@ -7,26 +8,21 @@ import { parseImportData } from '../utils/importParser';
 declare const __APP_VERSION__: string;
 
 interface DashboardScreenProps {
-  decks: Deck[];
-  loadingDecks: boolean;
-  onAddDeck: (name: string, description: string) => Promise<void>;
-  onImportDeck: (name: string, description: string, cardsList: { front: string; back: string }[]) => Promise<void>;
-  onSelectDeck: (deck: Deck) => void;
-  onStartReview: (deck: Deck) => void;
   user: User;
   onLogout: () => void;
+  onSelectDeck: (deck: Deck) => void;
+  onStartReview: (deck: Deck) => void;
+  showToast: (message: string, type: 'success' | 'error') => void;
 }
 
 export function DashboardScreen({
-  decks,
-  loadingDecks,
-  onAddDeck,
-  onImportDeck,
+  user,
+  onLogout,
   onSelectDeck,
   onStartReview,
-  user,
-  onLogout
+  showToast
 }: DashboardScreenProps) {
+  const { decks, loadingDecks, addDeck, importDeck, cloneSharedDeck } = useFirestore(user.uid);
   useEffect(() => {
     if ((window as any).WowkDigitalFooter) {
       (window as any).WowkDigitalFooter.init({
@@ -80,18 +76,52 @@ export function DashboardScreen({
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  const handleSelectDeckClick = async (deck: Deck) => {
+    if (deck.isShared && deck.ownerId) {
+      showToast('Cloning shared deck...', 'success');
+      try {
+        await cloneSharedDeck(deck.ownerId, deck.id);
+        const clonedDeck = { ...deck, isShared: false, ownerId: user.uid };
+        onSelectDeck(clonedDeck);
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to clone deck.', 'error');
+      }
+    } else {
+      onSelectDeck(deck);
+    }
+  };
+
+  const handleStartReviewClick = async (deck: Deck) => {
+    if (deck.isShared && deck.ownerId) {
+      showToast('Preparing shared deck...', 'success');
+      try {
+        await cloneSharedDeck(deck.ownerId, deck.id);
+        const clonedDeck = { ...deck, isShared: false, ownerId: user.uid };
+        onStartReview(clonedDeck);
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to clone deck for studying.', 'error');
+      }
+    } else {
+      onStartReview(deck);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDeckName.trim()) return;
     
     setIsSubmitting(true);
     try {
-      await onAddDeck(newDeckName.trim(), newDeckDesc.trim());
+      await addDeck(newDeckName.trim(), newDeckDesc.trim());
+      showToast('New deck created!', 'success');
       setNewDeckName('');
       setNewDeckDesc('');
       setShowAddModal(false);
     } catch (err) {
       console.error(err);
+      showToast('Failed to create deck.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -130,7 +160,8 @@ export function DashboardScreen({
         throw new Error('You must provide a deck name.');
       }
 
-      await onImportDeck(finalName, finalDesc, cardsList);
+      await importDeck(finalName, finalDesc, cardsList);
+      showToast('New deck with flashcards imported!', 'success');
       setImportJSON('');
       setImportName('');
       setImportDesc('');
@@ -138,6 +169,7 @@ export function DashboardScreen({
     } catch (err: any) {
       console.error(err);
       setImportError(err.message || 'Invalid data format.');
+      showToast('Failed to import deck.', 'error');
     } finally {
       setIsImporting(false);
     }
@@ -262,7 +294,7 @@ export function DashboardScreen({
                     <button 
                       className="btn btn-secondary" 
                       style={{ padding: '8px 12px', width: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      onClick={() => onSelectDeck(deck)}
+                      onClick={() => handleSelectDeckClick(deck)}
                       title="Manage cards"
                     >
                       <Settings size={14} />
@@ -271,7 +303,7 @@ export function DashboardScreen({
                     <button 
                       className="btn btn-primary" 
                       style={{ padding: '8px 12px', width: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      onClick={() => onStartReview(deck)}
+                      onClick={() => handleStartReviewClick(deck)}
                       disabled={deck.cardCount === 0}
                       title={deck.cardCount === 0 ? "No cards to study" : "Start studying"}
                     >

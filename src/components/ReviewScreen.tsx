@@ -1,20 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, CheckCircle, RefreshCw } from 'lucide-react';
+import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
+import type { User } from 'firebase/auth';
 
 interface ReviewScreenProps {
+  user: User;
   deck: Deck;
   onBack: () => void;
-  scoreCard: (deckId: string, cardId: string, currentCard: Card, quality: number) => Promise<void>;
-  subscribeToCards: (deckId: string, callback: (cards: Card[]) => void) => () => void;
 }
 
 export function ReviewScreen({
+  user,
   deck,
-  onBack,
-  scoreCard,
-  subscribeToCards
+  onBack
 }: ReviewScreenProps) {
+  const { scoreCard, subscribeToCards } = useFirestore(user.uid);
   const [loading, setLoading] = useState(true);
   
   // Session queue for review cards
