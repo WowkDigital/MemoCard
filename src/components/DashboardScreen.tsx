@@ -342,79 +342,94 @@ export function DashboardScreen({
         ) : (
           <div className="deck-list">
             {decks.map((deck) => (
-              <div key={deck.id} className="deck-card glass" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
-                  <div className="deck-info" style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span className="deck-name">{deck.name}</span>
-                      {deck.isShared && (
-                        <span className="card-badge" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#a5b4fc', fontSize: '0.75rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                          Shared
-                        </span>
-                      )}
-                    </div>
-                    {deck.description && <span className="deck-desc">{deck.description}</span>}
+              <div 
+                key={deck.id} 
+                className="deck-card glass" 
+                onClick={() => handleSelectDeckClick(deck)}
+                style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}
+              >
+                <div className="deck-info" style={{ flex: 1, minWidth: 0, gap: '2px' }}>
+                  {/* Row 1: Title */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <span className="deck-name" style={{ 
+                      whiteSpace: 'nowrap', 
+                      overflow: 'hidden', 
+                      textOverflow: 'ellipsis',
+                      fontSize: '1.05rem',
+                      lineHeight: '1.2'
+                    }}>{deck.name}</span>
+                    {deck.isShared && (
+                      <span className="card-badge" style={{ 
+                        background: 'rgba(99, 102, 241, 0.1)', 
+                        color: '#a5b4fc', 
+                        fontSize: '0.7rem', 
+                        border: '1px solid rgba(99, 102, 241, 0.2)',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        Shared
+                      </span>
+                    )}
                   </div>
                   
-                  {/* Action buttons (only icons, no text labels) */}
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button 
-                      className="btn btn-secondary" 
-                      style={{ padding: '0', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
-                      onClick={() => handleSelectDeckClick(deck)}
-                      title="Manage cards"
-                    >
-                      <Settings size={16} />
-                    </button>
-                    <button 
-                      className="btn btn-primary" 
-                      style={{ padding: '0', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
-                      onClick={() => handleStartReviewClick(deck)}
-                      disabled={(deckStats[deck.id]?.total ?? deck.cardCount) === 0}
-                      title={(deckStats[deck.id]?.total ?? deck.cardCount) === 0 ? "No cards to study" : "Start studying"}
-                    >
-                      <BookOpen size={16} />
-                    </button>
+                  {/* Row 2: Description */}
+                  {deck.description && (
+                    <span className="deck-desc" style={{ 
+                      whiteSpace: 'nowrap', 
+                      overflow: 'hidden', 
+                      textOverflow: 'ellipsis',
+                      fontSize: '0.8rem',
+                      lineHeight: '1.2',
+                      color: 'var(--text-secondary)'
+                    }}>{deck.description}</span>
+                  )}
+                  
+                  {/* Row 3: Parameters "30/1/0/2.47" */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px', 
+                    fontSize: '0.8rem', 
+                    color: 'var(--text-muted)',
+                    marginTop: '2px',
+                    lineHeight: '1'
+                  }}>
+                    <strong style={{ color: 'var(--primary)' }}>{deckStats[deck.id]?.total ?? deck.cardCount}</strong>
+                    <span style={{ opacity: 0.3 }}>/</span>
+                    <strong style={{ color: (deckStats[deck.id]?.due ?? 0) > 0 ? 'var(--color-again)' : 'var(--text-muted)' }}>{deckStats[deck.id]?.due ?? 0}</strong>
+                    <span style={{ opacity: 0.3 }}>/</span>
+                    <strong style={{ color: 'var(--color-easy)' }}>{deckStats[deck.id]?.mastered ?? 0}</strong>
+                    <span style={{ opacity: 0.3 }}>/</span>
+                    <strong style={{ color: '#c084fc' }}>{deckStats[deck.id]?.ease ?? '2.50'}</strong>
                   </div>
                 </div>
-
-                {/* Colored Metrics Row */}
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '12px', 
-                  borderTop: '1px solid var(--border-light)', 
-                  paddingTop: '10px',
-                  fontSize: '0.8rem',
-                  color: 'var(--text-secondary)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Total Cards">
-                    <span>Total:</span>
-                    <strong style={{ color: 'var(--primary)' }}>
-                      {deckStats[deck.id]?.total ?? deck.cardCount}
-                    </strong>
-                  </div>
-                  <span style={{ opacity: 0.2 }}>|</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Due Now">
-                    <span>Due:</span>
-                    <strong style={{ color: (deckStats[deck.id]?.due ?? 0) > 0 ? 'var(--color-again)' : 'var(--text-muted)' }}>
-                      {deckStats[deck.id]?.due ?? 0}
-                    </strong>
-                  </div>
-                  <span style={{ opacity: 0.2 }}>|</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Mastered">
-                    <span>Mastered:</span>
-                    <strong style={{ color: 'var(--color-easy)' }}>
-                      {deckStats[deck.id]?.mastered ?? 0}
-                    </strong>
-                  </div>
-                  <span style={{ opacity: 0.2 }}>|</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Average Ease Factor">
-                    <span>Ease:</span>
-                    <strong style={{ color: '#c084fc' }}>
-                      {deckStats[deck.id]?.ease ?? '2.50'}
-                    </strong>
-                  </div>
+                
+                {/* Action buttons (only icons, no text labels) */}
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0, marginLeft: '12px' }}>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectDeckClick(deck);
+                    }}
+                    title="Manage cards"
+                  >
+                    <Settings size={14} />
+                  </button>
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartReviewClick(deck);
+                    }}
+                    disabled={(deckStats[deck.id]?.total ?? deck.cardCount) === 0}
+                    title={(deckStats[deck.id]?.total ?? deck.cardCount) === 0 ? "No cards to study" : "Start studying"}
+                  >
+                    <BookOpen size={14} />
+                  </button>
                 </div>
               </div>
             ))}
