@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon } from 'lucide-react';
+import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon, SlidersHorizontal } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
@@ -26,6 +26,14 @@ export function DashboardScreen({
   
   const [deckStats, setDeckStats] = useState<Record<string, { total: number; due: number; mastered: number; ease: string }>>({});
   const [expandedDecks, setExpandedDecks] = useState<Record<string, boolean>>({});
+  const [sortBy, setSortBy] = useState<string>(() => {
+    return localStorage.getItem('memocard_sort_by') || 'recommended';
+  });
+
+  const handleSortChange = (newSort: string) => {
+    setSortBy(newSort);
+    localStorage.setItem('memocard_sort_by', newSort);
+  };
 
   const toggleDeckExpand = (deckId: string) => {
     setExpandedDecks(prev => ({
@@ -251,6 +259,88 @@ export function DashboardScreen({
     }
   };
 
+  // Sort decks dynamically based on selected criteria
+  const sortedDecks = [...decks].sort((a, b) => {
+    if (sortBy === 'recommended') {
+      const dueA = deckStats[a.id]?.due ?? 0;
+      const dueB = deckStats[b.id]?.due ?? 0;
+      
+      // 1. Decks with due cards first (more due cards first)
+      if (dueA > 0 && dueB === 0) return -1;
+      if (dueB > 0 && dueA === 0) return 1;
+      if (dueA > 0 && dueB > 0 && dueA !== dueB) {
+        return dueB - dueA;
+      }
+      
+      // 2. If no due cards, check unmastered cards (total - mastered)
+      const totalA = deckStats[a.id]?.total ?? a.cardCount ?? 0;
+      const totalB = deckStats[b.id]?.total ?? b.cardCount ?? 0;
+      
+      // Decks with 0 cards go to the bottom
+      if (totalA === 0 && totalB > 0) return 1;
+      if (totalB === 0 && totalA > 0) return -1;
+      
+      const masteredA = deckStats[a.id]?.mastered ?? 0;
+      const masteredB = deckStats[b.id]?.mastered ?? 0;
+      const unmasteredA = totalA - masteredA;
+      const unmasteredB = totalB - masteredB;
+      
+      if (unmasteredA !== unmasteredB) {
+        return unmasteredB - unmasteredA;
+      }
+      
+      // 3. Sort by ease factor ascending (lower ease = more difficult = study first)
+      const easeA = parseFloat(deckStats[a.id]?.ease ?? '2.50');
+      const easeB = parseFloat(deckStats[b.id]?.ease ?? '2.50');
+      if (easeA !== easeB) {
+        return easeA - easeB;
+      }
+    }
+    
+    if (sortBy === 'due-desc') {
+      const dueA = deckStats[a.id]?.due ?? 0;
+      const dueB = deckStats[b.id]?.due ?? 0;
+      if (dueA !== dueB) return dueB - dueA;
+    }
+    
+    if (sortBy === 'total-desc') {
+      const totalA = deckStats[a.id]?.total ?? a.cardCount ?? 0;
+      const totalB = deckStats[b.id]?.total ?? b.cardCount ?? 0;
+      if (totalA !== totalB) return totalB - totalA;
+    }
+
+    if (sortBy === 'name-asc') {
+      return a.name.localeCompare(b.name);
+    }
+
+    if (sortBy === 'name-desc') {
+      return b.name.localeCompare(a.name);
+    }
+
+    const getMs = (deck: Deck) => {
+      if (!deck.createdAt) return 0;
+      if (typeof deck.createdAt.toDate === 'function') return deck.createdAt.toDate().getTime();
+      const ca = deck.createdAt as any;
+      if (ca instanceof Date) return ca.getTime();
+      if (ca.seconds !== undefined) return ca.seconds * 1000;
+      return new Date(ca).getTime();
+    };
+
+    if (sortBy === 'created-desc') {
+      return getMs(b) - getMs(a);
+    }
+
+    if (sortBy === 'created-asc') {
+      return getMs(a) - getMs(b);
+    }
+
+    // Default secondary sort: own first, then shared
+    if (a.isShared && !b.isShared) return 1;
+    if (!a.isShared && b.isShared) return -1;
+    
+    return a.name.localeCompare(b.name);
+  });
+
   return (
     <div className="container">
       {/* Header */}
@@ -337,6 +427,63 @@ export function DashboardScreen({
           </div>
         </div>
 
+        {/* Sorting Toolbar */}
+        {decks.length > 0 && (
+          <div className="sort-bar" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            marginBottom: '16px',
+            padding: '8px 12px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid var(--border-light)',
+            borderRadius: '12px',
+            fontSize: '0.85rem'
+          }}>
+            <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+              <SlidersHorizontal size={14} style={{ color: 'var(--primary)' }} />
+              Sortowanie
+            </span>
+            <select
+              value={sortBy}
+              onChange={(e) => handleSortChange(e.target.value)}
+              style={{
+                background: 'rgba(0, 0, 0, 0.3)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-light)',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                fontSize: '0.85rem',
+                outline: 'none',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+                transition: 'all 0.2s ease',
+                width: 'auto',
+                WebkitAppearance: 'none',
+                MozAppearance: 'none',
+                appearance: 'none',
+                textAlign: 'right',
+                paddingRight: '18px',
+                backgroundImage: 'url("data:image/svg+xml;utf8,<svg fill=\'%239ca3af\' height=\'24\' viewBox=\'0 0 24 24\' width=\'24\' xmlns=\'http://www.w3.org/2000/svg\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right -4px center',
+                backgroundSize: '18px'
+              }}
+              onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
+              onBlur={(e) => e.target.style.borderColor = 'var(--border-light)'}
+            >
+              <option value="recommended" style={{ background: '#111827', color: '#f3f4f6' }}>💡 Do nauki (Sugerowane)</option>
+              <option value="due-desc" style={{ background: '#111827', color: '#f3f4f6' }}>📅 Do powtórki (Najwięcej)</option>
+              <option value="total-desc" style={{ background: '#111827', color: '#f3f4f6' }}>📚 Ilość kart (Najwięcej)</option>
+              <option value="name-asc" style={{ background: '#111827', color: '#f3f4f6' }}>🔤 Nazwa (A-Z)</option>
+              <option value="name-desc" style={{ background: '#111827', color: '#f3f4f6' }}>🔤 Nazwa (Z-A)</option>
+              <option value="created-desc" style={{ background: '#111827', color: '#f3f4f6' }}>🆕 Najnowsze</option>
+              <option value="created-asc" style={{ background: '#111827', color: '#f3f4f6' }}>⏳ Najstarsze</option>
+            </select>
+          </div>
+        )}
+
         {loadingDecks ? (
           <div className="loading-spinner"></div>
         ) : decks.length === 0 ? (
@@ -349,7 +496,7 @@ export function DashboardScreen({
           </div>
         ) : (
           <div className="deck-list">
-            {decks.map((deck) => {
+            {sortedDecks.map((deck) => {
               const isExpanded = !!expandedDecks[deck.id];
               return (
                 <div 
@@ -395,6 +542,25 @@ export function DashboardScreen({
                           flexShrink: 0
                         }}>
                           Shared
+                        </span>
+                      )}
+                      {(deckStats[deck.id]?.due ?? 0) > 0 && (
+                        <span className="review-badge" style={{ 
+                          background: 'rgba(239, 68, 68, 0.15)', 
+                          color: '#f87171', 
+                          fontSize: '0.7rem', 
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          animation: 'pulse 2s infinite ease-in-out'
+                        }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
+                          Do nauki
                         </span>
                       )}
                     </div>
