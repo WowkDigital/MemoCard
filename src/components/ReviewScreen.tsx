@@ -23,6 +23,102 @@ export function ReviewScreen({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+  const [foreverMode, setForeverMode] = useState<boolean>(() => {
+    return localStorage.getItem('memocard_forever_mode') === 'true';
+  });
+
+  const [questionFontSize] = useState<number>(() => {
+    const val = localStorage.getItem('memocard_question_font_size');
+    return val ? parseInt(val, 10) : 28;
+  });
+  const [answerFontSize] = useState<number>(() => {
+    const val = localStorage.getItem('memocard_answer_font_size');
+    return val ? parseInt(val, 10) : 28;
+  });
+
+  const handleToggleForeverMode = (val: boolean) => {
+    setForeverMode(val);
+    localStorage.setItem('memocard_forever_mode', String(val));
+  };
+
+  const [showStudyDetails, setShowStudyDetails] = useState<boolean>(() => {
+    return localStorage.getItem('memocard_show_study_details') === 'true';
+  });
+
+  const handleToggleShowStudyDetails = (val: boolean) => {
+    setShowStudyDetails(val);
+    localStorage.setItem('memocard_show_study_details', String(val));
+  };
+
+  const calculateSRSResult = (card: Card | undefined, quality: number) => {
+    if (!card) return { interval: 0, easeFactor: 2.5, easeDiff: 0 };
+    
+    let nextRepetitions = card.repetitions ?? 0;
+    let nextInterval = card.interval ?? 0;
+    let nextEaseFactor = card.easeFactor ?? 2.5;
+
+    if (quality === 6) {
+      return { interval: 999999, easeFactor: nextEaseFactor, easeDiff: 0 };
+    }
+
+    if (quality < 4) {
+      nextRepetitions = 0;
+      nextInterval = 1;
+    } else {
+      if (nextRepetitions === 0) {
+        nextInterval = 1;
+      } else if (nextRepetitions === 1) {
+        nextInterval = 6;
+      } else {
+        nextInterval = Math.round(nextInterval * nextEaseFactor);
+      }
+    }
+
+    const prevEaseFactor = nextEaseFactor;
+    nextEaseFactor = nextEaseFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+    if (nextEaseFactor < 1.3) {
+      nextEaseFactor = 1.3;
+    }
+    
+    const easeDiff = nextEaseFactor - prevEaseFactor;
+
+    return {
+      interval: nextInterval,
+      easeFactor: Number(nextEaseFactor.toFixed(2)),
+      easeDiff: Number(easeDiff.toFixed(2))
+    };
+  };
+
+  const renderStudyDetails = (card: Card | undefined, quality: number) => {
+    const result = calculateSRSResult(card, quality);
+    let intervalStr = '';
+    if (result.interval === 999999) {
+      intervalStr = 'na zawsze';
+    } else if (result.interval === 1) {
+      intervalStr = 'za 1 d';
+    } else {
+      intervalStr = `za ${result.interval} d`;
+    }
+
+    let easeStr = '';
+    if (result.easeDiff > 0) {
+      easeStr = `+${result.easeDiff}`;
+    } else if (result.easeDiff < 0) {
+      easeStr = `${result.easeDiff}`;
+    } else {
+      easeStr = 'b/z';
+    }
+
+    return (
+      <span className="score-label" style={{ display: 'block', fontSize: '0.7rem', opacity: 0.8, marginTop: '2px', fontWeight: 'normal', textTransform: 'none', lineHeight: 1.2 }}>
+        {intervalStr}
+        <span style={{ margin: '0 3px', opacity: 0.5 }}>•</span>
+        <span style={{ color: result.easeDiff > 0 ? '#10b981' : result.easeDiff < 0 ? '#ef4444' : 'var(--text-secondary)' }}>
+          {easeStr}
+        </span>
+      </span>
+    );
+  };
 
   // States to hold the text of the card front and back faces currently visible to the user.
   // This prevents visual glitches/flashing of text when transitioning between cards.
@@ -168,7 +264,7 @@ export function ReviewScreen({
           if (diffY > 0) {
             handleScore(3); // Swipe Down -> Hard (3)
           } else {
-            handleScore(5); // Swipe Up -> Easy (5)
+            handleScore(foreverMode ? 6 : 5); // Swipe Up -> Forever (6) or Easy (5)
           }
           resetSwipeState();
           setTimeout(() => {
@@ -202,14 +298,20 @@ export function ReviewScreen({
 
   const handleContainerClick = (e: React.MouseEvent) => {
     console.log("handleContainerClick triggered, isFlipped:", isFlipped);
-    // If the card is already flipped, click on background does nothing
-    if (isFlipped) return;
     
-    // Ignore clicks on links/buttons
+    // Ignore clicks on links/buttons/interactive zones
     const target = e.target as HTMLElement;
-    if (target.closest('.back-link') || target.closest('.btn-secondary') || target.closest('.btn-primary')) return;
+    if (
+      target.closest('.back-link') || 
+      target.closest('.btn') || 
+      target.closest('.btn-score') ||
+      target.closest('.score-buttons-grid') ||
+      target.closest('.review-actions-prompt')
+    ) {
+      return;
+    }
 
-    setIsFlipped(true);
+    setIsFlipped(prev => !prev);
   };
 
   // Determine which border direction is active to highlight it
@@ -268,7 +370,7 @@ export function ReviewScreen({
           score = 4;
           direction = 'right';
         } else if (e.key === 'ArrowUp') {
-          score = 5;
+          score = foreverMode ? 6 : 5;
           direction = 'up';
         } else if (e.key === 'ArrowDown') {
           score = 3;
@@ -289,7 +391,7 @@ export function ReviewScreen({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isFlipped, currentIndex, loading, isFinished, keyboardSwipeDirection]);
+  }, [isFlipped, currentIndex, loading, isFinished, keyboardSwipeDirection, foreverMode]);
 
   // Load and shuffle cards
   useEffect(() => {
@@ -390,11 +492,67 @@ export function ReviewScreen({
       style={{ cursor: !isFlipped ? 'pointer' : 'default', minHeight: '100vh' }}
     >
       {/* Navigation */}
-      <div className="navigation-bar">
+      <div className="navigation-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
         <button className="back-link" onClick={(e) => { e.stopPropagation(); onBack(); }}>
           <ArrowLeft size={16} />
           <span>End Session</span>
         </button>
+
+        {/* Remembered Forever Mode Toggle & Details Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Details toggle */}
+          <label style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+            userSelect: 'none',
+            background: showStudyDetails ? 'rgba(99, 102, 241, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+            border: `1px solid ${showStudyDetails ? 'rgba(99, 102, 241, 0.3)' : 'var(--border-light)'}`,
+            padding: '6px 12px',
+            borderRadius: '99px',
+            transition: 'all 0.2s ease',
+          }}>
+            <input 
+              type="checkbox" 
+              checked={showStudyDetails}
+              onChange={(e) => handleToggleShowStudyDetails(e.target.checked)}
+              onClick={(e) => e.stopPropagation()}
+              style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--primary)' }}
+            />
+            <span style={{ fontWeight: 500, color: showStudyDetails ? 'var(--primary)' : 'var(--text-primary)' }}>
+              Szczegóły
+            </span>
+          </label>
+
+          <label style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+            userSelect: 'none',
+            background: foreverMode ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+            border: `1px solid ${foreverMode ? 'rgba(168, 85, 247, 0.3)' : 'var(--border-light)'}`,
+            padding: '6px 12px',
+            borderRadius: '99px',
+            transition: 'all 0.2s ease',
+          }}>
+            <input 
+              type="checkbox" 
+              checked={foreverMode}
+              onChange={(e) => handleToggleForeverMode(e.target.checked)}
+              onClick={(e) => e.stopPropagation()}
+              style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--color-forever)' }}
+            />
+            <span style={{ fontWeight: 500, color: foreverMode ? 'var(--color-forever)' : 'var(--text-primary)' }}>
+              Forever Mode
+            </span>
+          </label>
+        </div>
       </div>
 
       {isFinished ? (
@@ -439,17 +597,17 @@ export function ReviewScreen({
 
           {/* Flashcard Component */}
           <div 
-            className={`flashcard-container ${isFlipped ? 'is-flipped' : ''} ${activeDirection ? `swipe-active-${activeDirection}` : ''}`}
+            className={`flashcard-container ${isFlipped ? 'is-flipped' : ''} ${activeDirection ? `swipe-active-${activeDirection}` : ''} ${foreverMode ? 'forever-mode-active' : ''}`}
             onClick={handleCardClick}
           >
             <div className="flashcard-inner">
               {/* Front Face */}
               <div className="flashcard-face flashcard-front">
-                <span className="flashcard-text">{frontToShow}</span>
+                <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>{frontToShow}</span>
               </div>
               
               {/* Back Face */}
-              <div className="flashcard-face flashcard-back" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
+              <div className="flashcard-face flashcard-back" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', paddingTop: '52px' }}>
                 <div style={{
                   position: 'absolute',
                   top: '20px',
@@ -468,7 +626,7 @@ export function ReviewScreen({
                 }}>
                   {frontToShow}
                 </div>
-                <span className="flashcard-text">{backToShow}</span>
+                <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>{backToShow}</span>
               </div>
             </div>
           </div>
@@ -484,22 +642,45 @@ export function ReviewScreen({
                 How well did you remember this card?
               </div>
               <div className="score-buttons-grid">
-                <button className="btn-score btn-again" onClick={() => handleScore(1)}>
-                  <strong>Again</strong>
-                  <span className="score-label">Reset<span className="shortcut-hint"> (⬅️ left)</span></span>
-                </button>
-                <button className="btn-score btn-hard" onClick={() => handleScore(3)}>
-                  <strong>Hard</strong>
-                  <span className="score-label">Hard<span className="shortcut-hint"> (⬇️ down)</span></span>
-                </button>
-                <button className="btn-score btn-good" onClick={() => handleScore(4)}>
-                  <strong>Good</strong>
-                  <span className="score-label">Good<span className="shortcut-hint"> (➡️ right)</span></span>
-                </button>
-                <button className="btn-score btn-easy" onClick={() => handleScore(5)}>
-                  <strong>Easy</strong>
-                  <span className="score-label">Easy<span className="shortcut-hint"> (⬆️ up)</span></span>
-                </button>
+                {foreverMode ? (
+                  <>
+                    <button className="btn-score btn-forever" onClick={() => handleScore(6)}>
+                      <strong>Forever</strong>
+                      {showStudyDetails && renderStudyDetails(currentCard, 6)}
+                    </button>
+                    <button className="btn-score btn-good" onClick={() => handleScore(4)}>
+                      <strong>Good</strong>
+                      {showStudyDetails && renderStudyDetails(currentCard, 4)}
+                    </button>
+                    <button className="btn-score btn-hard" onClick={() => handleScore(3)}>
+                      <strong>Hard</strong>
+                      {showStudyDetails && renderStudyDetails(currentCard, 3)}
+                    </button>
+                    <button className="btn-score btn-again" onClick={() => handleScore(1)}>
+                      <strong>Again</strong>
+                      {showStudyDetails && renderStudyDetails(currentCard, 1)}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="btn-score btn-again" onClick={() => handleScore(1)}>
+                      <strong>Again</strong>
+                      {showStudyDetails && renderStudyDetails(currentCard, 1)}
+                    </button>
+                    <button className="btn-score btn-hard" onClick={() => handleScore(3)}>
+                      <strong>Hard</strong>
+                      {showStudyDetails && renderStudyDetails(currentCard, 3)}
+                    </button>
+                    <button className="btn-score btn-good" onClick={() => handleScore(4)}>
+                      <strong>Good</strong>
+                      {showStudyDetails && renderStudyDetails(currentCard, 4)}
+                    </button>
+                    <button className="btn-score btn-easy" onClick={() => handleScore(5)}>
+                      <strong>Easy</strong>
+                      {showStudyDetails && renderStudyDetails(currentCard, 5)}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}

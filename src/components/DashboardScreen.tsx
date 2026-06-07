@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon, SlidersHorizontal } from 'lucide-react';
+import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon, SlidersHorizontal, Database } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
@@ -163,6 +163,21 @@ export function DashboardScreen({
   const [newDeckDesc, setNewDeckDesc] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // App settings states
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [questionFontSize, setQuestionFontSize] = useState<number>(() => {
+    const val = localStorage.getItem('memocard_question_font_size');
+    return val ? parseInt(val, 10) : 28;
+  });
+  const [answerFontSize, setAnswerFontSize] = useState<number>(() => {
+    const val = localStorage.getItem('memocard_answer_font_size');
+    return val ? parseInt(val, 10) : 28;
+  });
+  const [previewSide, setPreviewSide] = useState<'front' | 'back'>('front');
+  const [showStudyDetails, setShowStudyDetails] = useState<boolean>(() => {
+    return localStorage.getItem('memocard_show_study_details') === 'true';
+  });
+
   // JSON import states
   const [showImportModal, setShowImportModal] = useState(false);
   const [importName, setImportName] = useState('');
@@ -170,17 +185,27 @@ export function DashboardScreen({
   const [importJSON, setImportJSON] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isCloning, setIsCloning] = useState(false);
+  const [cloneProgress, setCloneProgress] = useState<{ current: number; total: number } | null>(null);
 
   const handleSelectDeckClick = async (deck: Deck) => {
     if (deck.isShared && deck.ownerId) {
-      showToast('Cloning shared deck...', 'success');
+      setIsCloning(true);
+      setCloneProgress({ current: 0, total: deck.cardCount || 0 });
       try {
-        await cloneSharedDeck(deck.ownerId, deck.id);
+        await cloneSharedDeck(deck.ownerId, deck.id, (progress) => {
+          setCloneProgress({ current: progress, total: deck.cardCount || 0 });
+        });
         const clonedDeck = { ...deck, isShared: false, ownerId: user.uid };
+        showToast('Deck cloned successfully!', 'success');
         onSelectDeck(clonedDeck);
       } catch (err) {
         console.error(err);
         showToast('Failed to clone deck.', 'error');
+      } finally {
+        setIsCloning(false);
+        setCloneProgress(null);
       }
     } else {
       onSelectDeck(deck);
@@ -189,14 +214,21 @@ export function DashboardScreen({
 
   const handleStartReviewClick = async (deck: Deck) => {
     if (deck.isShared && deck.ownerId) {
-      showToast('Preparing shared deck...', 'success');
+      setIsCloning(true);
+      setCloneProgress({ current: 0, total: deck.cardCount || 0 });
       try {
-        await cloneSharedDeck(deck.ownerId, deck.id);
+        await cloneSharedDeck(deck.ownerId, deck.id, (progress) => {
+          setCloneProgress({ current: progress, total: deck.cardCount || 0 });
+        });
         const clonedDeck = { ...deck, isShared: false, ownerId: user.uid };
+        showToast('Deck cloned successfully!', 'success');
         onStartReview(clonedDeck);
       } catch (err) {
         console.error(err);
         showToast('Failed to clone deck for studying.', 'error');
+      } finally {
+        setIsCloning(false);
+        setCloneProgress(null);
       }
     } else {
       onStartReview(deck);
@@ -244,7 +276,10 @@ export function DashboardScreen({
         throw new Error('Please provide a deck name (either fill the name field or include it at the beginning of the pasted data).');
       }
 
-      await importDeck(finalName, finalDesc, parsed.cards);
+      setImportProgress({ current: 0, total: parsed.cards.length });
+      await importDeck(finalName, finalDesc, parsed.cards, (progress) => {
+        setImportProgress({ current: progress, total: parsed.cards.length });
+      });
       showToast('New deck with flashcards imported!', 'success');
       setImportJSON('');
       setImportName('');
@@ -256,6 +291,7 @@ export function DashboardScreen({
       showToast('Failed to import deck.', 'error');
     } finally {
       setIsImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -380,6 +416,13 @@ export function DashboardScreen({
           </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button 
+            className="settings-btn" 
+            onClick={() => setShowSettingsModal(true)} 
+            title="Ustawienia aplikacji"
+          >
+            <Settings size={18} />
+          </button>
           <div 
             className="user-avatar" 
             title={user.isAnonymous ? 'Guest Account' : user.email || ''}
@@ -830,6 +873,232 @@ Gracias;Thank you`}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Import / Clone Progress Overlay */}
+      {(isImporting || isCloning) && (
+        <div className="progress-overlay">
+          <div className="progress-card glass">
+            <div className="progress-spinner-container">
+              <div className="progress-spinner"></div>
+              <Database className="progress-icon" size={28} />
+            </div>
+            
+            <div className="progress-info">
+              <h3 className="progress-title">
+                {isImporting ? 'Importowanie pytań...' : 'Klonowanie talii...'}
+              </h3>
+              <p className="progress-subtitle">
+                Zapisuję dane w bazie Firestore. Proszę nie zamykać aplikacji.
+              </p>
+            </div>
+
+            {((isImporting && importProgress) || (isCloning && cloneProgress)) && (
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                <span className="progress-percentage">
+                  {Math.round(
+                    ((isImporting ? importProgress?.current : cloneProgress?.current) || 0) /
+                    ((isImporting ? importProgress?.total : cloneProgress?.total) || 1) * 100
+                  )}%
+                </span>
+                <div className="progress-bar-wrapper">
+                  <div 
+                    className="progress-bar-fill-animated"
+                    style={{ 
+                      width: `${Math.round(
+                        ((isImporting ? importProgress?.current : cloneProgress?.current) || 0) /
+                        ((isImporting ? importProgress?.total : cloneProgress?.total) || 1) * 100
+                      )}%` 
+                    }}
+                  ></div>
+                </div>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {isImporting ? importProgress?.current : cloneProgress?.current} / {isImporting ? importProgress?.total : cloneProgress?.total} pytań
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* App Settings Modal */}
+      {showSettingsModal && (
+        <div className="modal-overlay" onClick={() => setShowSettingsModal(false)}>
+          <div className="modal-content glass animate-fade-in" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={20} style={{ color: 'var(--primary)' }} />
+                Ustawienia aplikacji
+              </h3>
+              <button className="close-btn" onClick={() => setShowSettingsModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Question Font Size Slider */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Rozmiar czcionki pytania</label>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{questionFontSize}px</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="16" 
+                  max="48" 
+                  value={questionFontSize} 
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setQuestionFontSize(val);
+                    localStorage.setItem('memocard_question_font_size', String(val));
+                  }}
+                  style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Answer Font Size Slider */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Rozmiar czcionki odpowiedzi</label>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{answerFontSize}px</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="16" 
+                  max="48" 
+                  value={answerFontSize} 
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setAnswerFontSize(val);
+                    localStorage.setItem('memocard_answer_font_size', String(val));
+                  }}
+                  style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Show Study Details Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(255, 255, 255, 0.08)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ paddingRight: '16px' }}>
+                  <label className="form-label" style={{ marginBottom: '2px', cursor: 'pointer', display: 'block' }}>Pokazuj szczegóły powtórek na przyciskach</label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8, margin: 0, lineHeight: '1.3' }}>Wyświetla czas do kolejnej powtórki oraz zmianę wskaźnika łatwości (algorytm SM-2).</p>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={showStudyDetails} 
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setShowStudyDetails(val);
+                    localStorage.setItem('memocard_show_study_details', String(val));
+                  }}
+                  style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }}
+                />
+              </div>
+
+              {/* Visualization of the card */}
+              <div style={{ marginTop: '10px' }}>
+                <span className="form-label" style={{ marginBottom: '10px' }}>Podgląd karty</span>
+                
+                {/* Tabs to select Front / Back preview */}
+                <div style={{
+                  display: 'flex',
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  borderRadius: '10px',
+                  padding: '3px',
+                  marginBottom: '12px'
+                }}>
+                  <button 
+                    type="button"
+                    onClick={() => setPreviewSide('front')}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      background: previewSide === 'front' ? 'var(--primary)' : 'transparent',
+                      color: previewSide === 'front' ? 'white' : 'var(--text-secondary)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Pytanie (Awers)
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setPreviewSide('back')}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      background: previewSide === 'back' ? 'var(--primary)' : 'transparent',
+                      color: previewSide === 'back' ? 'white' : 'var(--text-secondary)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Odpowiedź (Rewers)
+                  </button>
+                </div>
+
+                {/* Card Container Preview */}
+                <div 
+                  className={`flashcard-container ${previewSide === 'back' ? 'is-flipped' : ''}`}
+                  style={{ 
+                    height: 'auto', 
+                    minHeight: '200px', 
+                    marginBottom: 0, 
+                    pointerEvents: 'none'
+                  }}
+                >
+                  <div className="flashcard-inner" style={{ height: 'auto', minHeight: 'inherit' }}>
+                    {/* Front preview */}
+                    <div className="flashcard-face flashcard-front" style={{ minHeight: '200px', height: 'auto', padding: '20px' }}>
+                      <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>
+                        Jak nazywa się stolica Francji?
+                      </span>
+                    </div>
+
+                    {/* Back preview */}
+                    <div className="flashcard-face flashcard-back" style={{ minHeight: '200px', height: 'auto', padding: '20px', paddingTop: '45px' }}>
+                      <div style={{
+                        position: 'absolute',
+                        top: '12px',
+                        left: '12px',
+                        right: '12px',
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                        opacity: 0.7,
+                        textAlign: 'center',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                        paddingBottom: '4px',
+                        fontStyle: 'italic'
+                      }}>
+                        Jak nazywa się stolica Francji?
+                      </div>
+                      <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>
+                        Paryż (Paris) - to największe miasto i stolica Francji, położona w centrum Basenu Paryskiego, nad Sekwaną.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-actions" style={{ marginTop: '10px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ width: '100%' }}
+                  onClick={() => setShowSettingsModal(false)}
+                >
+                  Zapisz i zamknij
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

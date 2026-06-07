@@ -23,6 +23,8 @@
   --color-good-glow: rgba(59, 130, 246, 0.15);
   --color-easy: #10b981;
   --color-easy-glow: rgba(16, 185, 129, 0.15);
+  --color-forever: #a855f7;
+  --color-forever-glow: rgba(168, 85, 247, 0.15);
 
   /* Fonts */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
@@ -431,7 +433,8 @@ body {
 
 .flashcard-container {
   width: 100%;
-  height: 280px;
+  min-height: 280px;
+  height: auto;
   margin-bottom: 32px;
   cursor: pointer;
   position: relative;
@@ -441,14 +444,15 @@ body {
 .flashcard-inner {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: auto;
+  min-height: inherit;
   text-align: center;
 }
 
 .flashcard-face {
-  position: absolute;
   width: 100%;
-  height: 100%;
+  min-height: 280px;
+  height: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -474,27 +478,43 @@ body {
   border-bottom: 4px solid rgba(245, 158, 11, 0.15); /* Hard - Orange */
 }
 
-/* Visibility toggling with fast fade */
+.flashcard-container.forever-mode-active .flashcard-back {
+  border-top: 4px solid rgba(168, 85, 247, 0.15);   /* Forever - Purple */
+}
+
+/* Visibility toggling with relative/absolute positions */
 .flashcard-container:not(.is-flipped) .flashcard-front {
+  position: relative;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+  z-index: 2;
 }
 .flashcard-container:not(.is-flipped) .flashcard-back {
+  position: absolute;
+  top: 0;
+  left: 0;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  z-index: 1;
 }
 
 .flashcard-container.is-flipped .flashcard-front {
+  position: absolute;
+  top: 0;
+  left: 0;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  z-index: 1;
 }
 .flashcard-container.is-flipped .flashcard-back {
+  position: relative;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+  z-index: 2;
 }
 
 /* Highlight borders on gesture swiping */
@@ -511,6 +531,11 @@ body {
 .flashcard-container.is-flipped.swipe-active-up .flashcard-back {
   border-top-color: var(--color-easy);
   box-shadow: 0 -8px 20px rgba(16, 185, 129, 0.25), 0 10px 40px 0 rgba(0, 0, 0, 0.5);
+}
+
+.flashcard-container.forever-mode-active.is-flipped.swipe-active-up .flashcard-back {
+  border-top-color: var(--color-forever);
+  box-shadow: 0 -8px 20px rgba(168, 85, 247, 0.25), 0 10px 40px 0 rgba(0, 0, 0, 0.5);
 }
 
 .flashcard-container.is-flipped.swipe-active-down .flashcard-back {
@@ -618,6 +643,15 @@ body {
 .btn-easy:hover {
   background: var(--color-easy-glow);
   border-color: rgba(16, 185, 129, 0.4);
+  transform: translateY(-2px);
+}
+
+.btn-forever {
+  color: var(--color-forever);
+}
+.btn-forever:hover {
+  background: var(--color-forever-glow);
+  border-color: rgba(168, 85, 247, 0.4);
   transform: translateY(-2px);
 }
 
@@ -902,7 +936,8 @@ body {
   
   /* Study view adjustments for smaller heights */
   .flashcard-container {
-    height: 230px;
+    min-height: 230px;
+    height: auto;
     margin-bottom: 20px;
   }
   
@@ -911,6 +946,8 @@ body {
   }
   
   .flashcard-face {
+    min-height: 230px;
+    height: auto;
     padding: 24px 16px;
   }
   
@@ -1065,6 +1102,131 @@ body {
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Premium Import/Clone Progress Overlay */
+.progress-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(11, 15, 25, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.progress-card {
+  width: 90%;
+  max-width: 420px;
+  padding: 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.progress-spinner-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+}
+
+.progress-spinner {
+  border: 4px solid rgba(99, 102, 241, 0.1);
+  border-top: 4px solid var(--primary);
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+.progress-icon {
+  position: absolute;
+  color: var(--primary);
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.progress-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.progress-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.progress-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.progress-bar-wrapper {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 99px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.progress-bar-fill-animated {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary) 0%, #10b981 100%);
+  border-radius: 99px;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px var(--primary-glow);
+}
+
+.progress-percentage {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #a5b4fc 0%, var(--primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Settings Button in Header */
+.settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-btn:hover {
+  color: var(--primary);
+  background: var(--primary-glow);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: scale(1.05);
 }
 
 

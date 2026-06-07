@@ -16,9 +16,10 @@ import {
   getDoc,
   getDocs,
   getDocsFromCache,
-  getDocsFromServer
+  getDocsFromServer,
+  where
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { auth, db } from '../firebase/config';
 
 // Pamięć podręczna w pamięci aplikacji do przechowywania znaczników czasu ostatniej synchronizacji z serwerem.
 // Zapobiega to nadmiarowym zapytaniom do serwera podczas nawigacji między ekranami (np. powrót do Dashboardu).
@@ -34,6 +35,7 @@ export interface Deck {
   cardCount: number;
   ownerId?: string;
   isShared?: boolean;
+  visibility?: 'private' | 'public' | 'guest';
 }
 
 export interface Card {
@@ -52,6 +54,7 @@ export function useFirestore(userId: string | undefined) {
   const [loadingDecks, setLoadingDecks] = useState(true);
 
   // 1. Observe all decks (own and shared in testing phase) in real-time
+  // 1. Observe own and shared decks in real-time
   useEffect(() => {
     if (!userId) {
       setDecks([]);
@@ -59,11 +62,62 @@ export function useFirestore(userId: string | undefined) {
       return;
     }
 
-    // We use collectionGroup to fetch decks of all users
-    const decksRef = collectionGroup(db, 'decks');
+    const currentUser = auth.currentUser;
+    const isOwner = currentUser && currentUser.email === 'wowk.digital@gmail.com';
 
-    const unsubscribe = onSnapshot(decksRef, (snapshot) => {
-      const allDecks = snapshot.docs.map(doc => {
+    let ownDecks: Deck[] = [];
+    let sharedDecks: Deck[] = [];
+
+    const updateCombinedDecks = () => {
+      const myDeckIds = new Set(ownDecks.map(d => d.id));
+      const filteredShared = sharedDecks.filter(d => d.ownerId !== userId && !myDeckIds.has(d.id));
+
+      const seenSharedIds = new Set<string>();
+      const uniqueShared = filteredShared.filter(deck => {
+        if (seenSharedIds.has(deck.id)) return false;
+        seenSharedIds.add(deck.id);
+        return true;
+      });
+
+      const combined = [...ownDecks, ...uniqueShared];
+
+      combined.sort((a, b) => {
+        if (a.isShared && !b.isShared) return 1;
+        if (!a.isShared && b.isShared) return -1;
+        return 0;
+      });
+
+      setDecks(combined);
+      setLoadingDecks(false);
+    };
+
+    // Subscribe to own decks
+    const ownDecksRef = collection(db, 'users', userId, 'decks');
+    const unsubscribeOwn = onSnapshot(ownDecksRef, (snapshot) => {
+      ownDecks = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ownerId: userId,
+        isShared: false,
+        ...doc.data()
+      })) as Deck[];
+      updateCombinedDecks();
+    }, (error) => {
+      console.error("Error fetching own decks:", error);
+      setLoadingDecks(false);
+    });
+
+    // Subscribe to shared/public/guest decks
+    let sharedQuery;
+    if (isOwner) {
+      sharedQuery = collectionGroup(db, 'decks');
+    } else if (currentUser?.isAnonymous) {
+      sharedQuery = query(collectionGroup(db, 'decks'), where('visibility', '==', 'guest'));
+    } else {
+      sharedQuery = query(collectionGroup(db, 'decks'), where('visibility', 'in', ['public', 'guest']));
+    }
+
+    const unsubscribeShared = onSnapshot(sharedQuery, (snapshot) => {
+      sharedDecks = snapshot.docs.map(doc => {
         const pathParts = doc.ref.path.split('/');
         const ownerId = pathParts[1];
         return {
@@ -73,38 +127,16 @@ export function useFirestore(userId: string | undefined) {
           ...doc.data()
         };
       }) as Deck[];
-
-      // Filter duplicates: if the user has already cloned a deck (their own document with the same ID),
-      // we do not show the original shared version.
-      // Also, ensure each shared deck ID is only displayed once in the list.
-      const myDeckIds = new Set(allDecks.filter(d => d.ownerId === userId).map(d => d.id));
-      const seenSharedIds = new Set<string>();
-      
-      const filteredDecks = allDecks.filter(deck => {
-        if (deck.ownerId === userId) return true;
-        // Show shared deck only when guest/user does not have its copy with the same ID yet
-        if (myDeckIds.has(deck.id)) return false;
-        // Show only one copy of each shared deck ID
-        if (seenSharedIds.has(deck.id)) return false;
-        seenSharedIds.add(deck.id);
-        return true;
-      });
-
-      // Sorting: own first, then shared
-      filteredDecks.sort((a, b) => {
-        if (a.isShared && !b.isShared) return 1;
-        if (!a.isShared && b.isShared) return -1;
-        return 0;
-      });
-
-      setDecks(filteredDecks);
-      setLoadingDecks(false);
+      updateCombinedDecks();
     }, (error) => {
-      console.error("Error fetching decks:", error);
-      setLoadingDecks(false);
+      console.error("Error fetching shared decks:", error);
+      updateCombinedDecks();
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeOwn();
+      unsubscribeShared();
+    };
   }, [userId]);
 
   // 2. Add new deck
@@ -116,7 +148,8 @@ export function useFirestore(userId: string | undefined) {
         name,
         description,
         createdAt: serverTimestamp(),
-        cardCount: 0
+        cardCount: 0,
+        visibility: 'private'
       });
     } catch (error) {
       console.error("Error adding deck:", error);
@@ -280,6 +313,20 @@ export function useFirestore(userId: string | undefined) {
       let nextInterval = currentCard.interval;
       let nextEaseFactor = currentCard.easeFactor;
 
+      if (quality === 6) {
+        // Forever mode: set an extremely large interval and nextReview far in the future
+        nextInterval = 999999;
+        const nextReviewDate = new Date(9999, 11, 31);
+        const cardDocRef = doc(db, 'users', userId, 'decks', deckId, 'cards', cardId);
+        await updateDoc(cardDocRef, {
+          repetitions: nextRepetitions + 1,
+          interval: nextInterval,
+          easeFactor: nextEaseFactor,
+          nextReview: Timestamp.fromDate(nextReviewDate)
+        });
+        return;
+      }
+
       if (quality < 4) {
         // Again or Hard with a low score resets repetitions
         nextRepetitions = 0;
@@ -319,21 +366,48 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
+  // Helper to run Firestore write batches in parallel with a concurrency limit
+  const commitBatchesWithConcurrency = async (
+    batches: any[],
+    concurrencyLimit: number,
+    onBatchComplete: (index: number) => void
+  ) => {
+    let index = 0;
+    const workers = Array(Math.min(concurrencyLimit, batches.length))
+      .fill(null)
+      .map(async () => {
+        while (index < batches.length) {
+          const currentIndex = index++;
+          await batches[currentIndex].commit();
+          onBatchComplete(currentIndex);
+        }
+      });
+    await Promise.all(workers);
+  };
+
   // Import entire deck with cards
-  const importDeck = async (name: string, description: string, cardsList: { front: string; back: string }[]) => {
+  const importDeck = async (
+    name: string, 
+    description: string, 
+    cardsList: { front: string; back: string }[],
+    onProgress?: (progress: number) => void
+  ) => {
     if (!userId) return;
     try {
       const deckDocRef = doc(collection(db, 'users', userId, 'decks'));
       const now = new Date();
       const chunkSize = 400;
 
-      // 1. Utworzenie pierwszego wsadu z dokumentem talii oraz pierwszym pakietem kart
+      const batches = [];
+      
+      // 1. Pierwszy wsad z dokumentem talii oraz pierwszym pakietem kart
       const firstBatch = writeBatch(db);
       firstBatch.set(deckDocRef, {
         name,
         description,
         createdAt: serverTimestamp(),
-        cardCount: cardsList.length
+        cardCount: cardsList.length,
+        visibility: 'private'
       });
 
       const firstChunk = cardsList.slice(0, chunkSize);
@@ -349,9 +423,9 @@ export function useFirestore(userId: string | undefined) {
           nextReview: Timestamp.fromDate(now)
         });
       });
-      await firstBatch.commit();
+      batches.push(firstBatch);
 
-      // 2. Utworzenie i wgranie kolejnych pakietów kart w pętli (zabezpieczenie przed limitem 500 operacji Firestore)
+      // 2. Przygotowanie kolejnych wsadów w pętli
       for (let i = chunkSize; i < cardsList.length; i += chunkSize) {
         const chunk = cardsList.slice(i, i + chunkSize);
         const batch = writeBatch(db);
@@ -367,10 +441,25 @@ export function useFirestore(userId: string | undefined) {
             nextReview: Timestamp.fromDate(now)
           });
         });
-        await batch.commit();
+        batches.push(batch);
       }
 
-      // 3. Inwalidacja pamięci podręcznej dla nowo wgranej talii
+      // 3. Wgrywanie równoległe (max 5 jednocześnie) z raportowaniem postępu
+      let processedCount = 0;
+      await commitBatchesWithConcurrency(batches, 5, (index) => {
+        let batchSize = 0;
+        if (index === 0) {
+          batchSize = firstChunk.length;
+        } else {
+          batchSize = Math.min(chunkSize, cardsList.length - chunkSize - (index - 1) * chunkSize);
+        }
+        processedCount += batchSize;
+        if (onProgress) {
+          onProgress(processedCount);
+        }
+      });
+
+      // 4. Inwalidacja pamięci podręcznej dla nowo wgranej talii
       delete serverSyncCache[deckDocRef.id];
     } catch (error) {
       console.error("Error importing deck:", error);
@@ -379,7 +468,11 @@ export function useFirestore(userId: string | undefined) {
   };
 
   // Import cards to an existing deck
-  const importCards = async (deckId: string, cardsList: { front: string; back: string }[]) => {
+  const importCards = async (
+    deckId: string, 
+    cardsList: { front: string; back: string }[],
+    onProgress?: (progress: number) => void
+  ) => {
     if (!userId) return;
     try {
       // Inwalidacja pamięci podręcznej synchronizacji dla tej talii
@@ -388,7 +481,7 @@ export function useFirestore(userId: string | undefined) {
       const now = new Date();
       const chunkSize = 400;
 
-      // 1. Zapis kart w pakietach po 400 sztuk (zabezpieczenie przed limitem 500 operacji Firestore)
+      const batches = [];
       for (let i = 0; i < cardsList.length; i += chunkSize) {
         const chunk = cardsList.slice(i, i + chunkSize);
         const batch = writeBatch(db);
@@ -404,8 +497,18 @@ export function useFirestore(userId: string | undefined) {
             nextReview: Timestamp.fromDate(now)
           });
         });
-        await batch.commit();
+        batches.push(batch);
       }
+
+      // 1. Zapis kart w pakietach równolegle (max 5 jednocześnie)
+      let processedCount = 0;
+      await commitBatchesWithConcurrency(batches, 5, (index) => {
+        const batchSize = Math.min(chunkSize, cardsList.length - index * chunkSize);
+        processedCount += batchSize;
+        if (onProgress) {
+          onProgress(processedCount);
+        }
+      });
 
       // 2. Aktualizacja liczby kart w dokumencie talii
       const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
@@ -422,7 +525,11 @@ export function useFirestore(userId: string | undefined) {
   };
 
   // Clone shared deck and its cards to log in user account
-  const cloneSharedDeck = async (sharedOwnerId: string, sharedDeckId: string) => {
+  const cloneSharedDeck = async (
+    sharedOwnerId: string, 
+    sharedDeckId: string,
+    onProgress?: (progress: number) => void
+  ) => {
     if (!userId) return;
     try {
       // 1. Pobranie danych oryginalnej talii
@@ -438,13 +545,16 @@ export function useFirestore(userId: string | undefined) {
       const now = new Date();
       const chunkSize = 400;
 
+      const batches = [];
+
       // 3. Pierwszy wsad z nowym dokumentem talii oraz pierwszym pakietem kart
       const firstBatch = writeBatch(db);
       firstBatch.set(newDeckRef, {
         name: deckData.name,
         description: deckData.description || '',
         createdAt: serverTimestamp(),
-        cardCount: cardsList.length
+        cardCount: cardsList.length,
+        visibility: 'private'
       });
 
       const firstChunk = cardsList.slice(0, chunkSize);
@@ -460,9 +570,9 @@ export function useFirestore(userId: string | undefined) {
           nextReview: Timestamp.fromDate(now)
         });
       });
-      await firstBatch.commit();
+      batches.push(firstBatch);
 
-      // 4. Skopiowanie pozostałych kart w pakietach po 400
+      // 4. Przygotowanie pozostałych kart w pakietach po 400
       for (let i = chunkSize; i < cardsList.length; i += chunkSize) {
         const chunk = cardsList.slice(i, i + chunkSize);
         const batch = writeBatch(db);
@@ -478,13 +588,44 @@ export function useFirestore(userId: string | undefined) {
             nextReview: Timestamp.fromDate(now)
           });
         });
-        await batch.commit();
+        batches.push(batch);
       }
 
-      // 5. Inwalidacja pamięci podręcznej synchronizacji
+      // 5. Wgrywanie równoległe (max 5 jednocześnie) z raportowaniem postępu
+      let processedCount = 0;
+      await commitBatchesWithConcurrency(batches, 5, (index) => {
+        let batchSize = 0;
+        if (index === 0) {
+          batchSize = firstChunk.length;
+        } else {
+          batchSize = Math.min(chunkSize, cardsList.length - chunkSize - (index - 1) * chunkSize);
+        }
+        processedCount += batchSize;
+        if (onProgress) {
+          onProgress(processedCount);
+        }
+      });
+
+      // 6. Inwalidacja pamięci podręcznej synchronizacji
       delete serverSyncCache[sharedDeckId];
     } catch (error) {
       console.error("Error cloning deck:", error);
+      throw error;
+    }
+  };
+
+  // Update deck metadata (name, description, visibility)
+  const updateDeck = async (deckId: string, name: string, description: string, visibility: 'private' | 'public' | 'guest') => {
+    if (!userId) return;
+    try {
+      const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
+      await updateDoc(deckDocRef, {
+        name,
+        description,
+        visibility
+      });
+    } catch (error) {
+      console.error("Error updating deck:", error);
       throw error;
     }
   };
@@ -501,6 +642,7 @@ export function useFirestore(userId: string | undefined) {
     scoreCard,
     importDeck,
     importCards,
-    cloneSharedDeck
+    cloneSharedDeck,
+    updateDeck
   };
 }

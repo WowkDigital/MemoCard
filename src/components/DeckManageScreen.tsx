@@ -9,7 +9,8 @@ import {
   BookOpen, 
   Award, 
   Clock, 
-  TrendingUp 
+  TrendingUp,
+  Database
 } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
@@ -31,9 +32,34 @@ export function DeckManageScreen({
   onDeleteDeckSuccess,
   showToast
 }: DeckManageScreenProps) {
-  const { addCard, deleteCard, importCards, deleteDeck, subscribeToCards } = useFirestore(user.uid);
+  const { addCard, deleteCard, importCards, deleteDeck, subscribeToCards, updateDeck } = useFirestore(user.uid);
   const [cards, setCards] = useState<Card[]>([]);
   const [loadingCards, setLoadingCards] = useState(true);
+
+  // States for displaying and editing deck settings
+  const [displayName, setDisplayName] = useState(deck.name);
+  const [displayDesc, setDisplayDesc] = useState(deck.description || '');
+  const [editName, setEditName] = useState(deck.name);
+  const [editDesc, setEditDesc] = useState(deck.description || '');
+  const [visibility, setVisibility] = useState<'private' | 'public' | 'guest'>(deck.visibility || 'private');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) return;
+    setIsSavingSettings(true);
+    try {
+      await updateDeck(deck.id, editName.trim(), editDesc.trim(), visibility);
+      setDisplayName(editName.trim());
+      setDisplayDesc(editDesc.trim());
+      showToast('Deck settings updated successfully!', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to update deck settings.', 'error');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
   
   const [activeTab, setActiveTab] = useState<'cards' | 'stats'>('cards');
   const [front, setFront] = useState('');
@@ -46,6 +72,7 @@ export function DeckManageScreen({
   const [importJSON, setImportJSON] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Subscribe to deck's cards
   useEffect(() => {
@@ -201,7 +228,10 @@ export function DeckManageScreen({
     setIsImporting(true);
     try {
       const parsed = parseImportData(text);
-      await importCards(deck.id, parsed.cards);
+      setImportProgress({ current: 0, total: parsed.cards.length });
+      await importCards(deck.id, parsed.cards, (progress) => {
+        setImportProgress({ current: progress, total: parsed.cards.length });
+      });
       showToast(`${parsed.cards.length} cards imported!`, 'success');
       setImportJSON('');
       setShowImportMode(false);
@@ -211,6 +241,7 @@ export function DeckManageScreen({
       showToast('Import failed.', 'error');
     } finally {
       setIsImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -229,10 +260,10 @@ export function DeckManageScreen({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <h1 style={{ fontSize: '1.8rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Layers size={22} style={{ color: 'var(--primary)' }} />
-            {deck.name}
+            {displayName}
           </h1>
-          {deck.description && (
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{deck.description}</p>
+          {displayDesc && (
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{displayDesc}</p>
           )}
         </div>
       </header>
@@ -380,7 +411,11 @@ Goodbye;Do widzenia
                     <span className="card-item-front">{card.front}</span>
                     <span className="card-item-back">{card.back}</span>
                     <span className="card-item-meta">
-                      Repetitions: {card.repetitions} | Ease: {card.easeFactor} | Interval: {card.interval}d
+                      {card.interval >= 999999 ? (
+                        <span style={{ color: 'var(--color-forever)', fontWeight: 600 }}>Remembered Forever</span>
+                      ) : (
+                        `Repetitions: ${card.repetitions} | Ease: ${card.easeFactor} | Interval: ${card.interval}d`
+                      )}
                     </span>
                   </div>
                   <button 
@@ -394,6 +429,91 @@ Goodbye;Do widzenia
               ))}
             </div>
           )}
+
+          {/* Deck Settings */}
+          <div className="glass" style={{ padding: '20px', marginBottom: '24px' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontWeight: 600, fontSize: '1.1rem' }}>Deck Settings</h3>
+            <form onSubmit={handleSaveSettings}>
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Deck name</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  maxLength={50}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Description</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '8px' }}>Visibility</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="visibility" 
+                      value="private" 
+                      checked={visibility === 'private'}
+                      onChange={() => setVisibility('private')}
+                      style={{ marginTop: '3px', width: 'auto', display: 'inline-block' }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'block', color: 'var(--text-primary)' }}>Private</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Only you can view and study this deck.</span>
+                    </div>
+                  </label>
+                  
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="visibility" 
+                      value="public" 
+                      checked={visibility === 'public'}
+                      onChange={() => setVisibility('public')}
+                      style={{ marginTop: '3px', width: 'auto', display: 'inline-block' }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'block', color: 'var(--text-primary)' }}>Public (Registered Users)</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Logged-in users can view, clone, and study this deck.</span>
+                    </div>
+                  </label>
+                  
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="visibility" 
+                      value="guest" 
+                      checked={visibility === 'guest'}
+                      onChange={() => setVisibility('guest')}
+                      style={{ marginTop: '3px', width: 'auto', display: 'inline-block' }}
+                    />
+                    <div>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'block', color: 'var(--text-primary)' }}>Available for Guests</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anyone (including anonymous guest accounts) can view, clone, and study this deck.</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              <button 
+                type="submit" 
+                className="btn btn-primary" 
+                style={{ width: '100%', marginTop: '8px' }}
+                disabled={isSavingSettings}
+              >
+                {isSavingSettings ? 'Saving Settings...' : 'Save Settings'}
+              </button>
+            </form>
+          </div>
 
           {/* Danger Zone: Delete Deck */}
           <div className="glass" style={{ padding: '20px', border: '1px dashed rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.02)' }}>
@@ -678,6 +798,42 @@ Goodbye;Do widzenia
 
       {/* Footer Container */}
       <div id="wowk-footer-container" style={{ width: '100%', marginTop: 'auto' }}></div>
+
+      {/* Import Progress Overlay */}
+      {isImporting && (
+        <div className="progress-overlay">
+          <div className="progress-card glass">
+            <div className="progress-spinner-container">
+              <div className="progress-spinner"></div>
+              <Database className="progress-icon" size={28} />
+            </div>
+            
+            <div className="progress-info">
+              <h3 className="progress-title">Importowanie pytań...</h3>
+              <p className="progress-subtitle">
+                Zapisuję dane w bazie Firestore. Proszę nie zamykać aplikacji.
+              </p>
+            </div>
+
+            {importProgress && (
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                <span className="progress-percentage">
+                  {Math.round((importProgress.current / importProgress.total) * 100)}%
+                </span>
+                <div className="progress-bar-wrapper">
+                  <div 
+                    className="progress-bar-fill-animated"
+                    style={{ width: `${Math.round((importProgress.current / importProgress.total) * 100)}%` }}
+                  ></div>
+                </div>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {importProgress.current} / {importProgress.total} pytań
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
