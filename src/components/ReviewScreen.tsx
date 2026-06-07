@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, CheckCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle, RefreshCw, Settings, Eye, EyeOff, Infinity, LayoutDashboard, X } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
@@ -15,7 +15,7 @@ export function ReviewScreen({
   deck,
   onBack
 }: ReviewScreenProps) {
-  const { scoreCard, getCardsOnce } = useFirestore(user.uid);
+  const { scoreCard, getDueCards } = useFirestore(user.uid);
   const [loading, setLoading] = useState(true);
   
   // Session queue for review cards
@@ -27,14 +27,17 @@ export function ReviewScreen({
     return localStorage.getItem('memocard_forever_mode') === 'true';
   });
 
-  const [questionFontSize] = useState<number>(() => {
+  const [questionFontSize, setQuestionFontSize] = useState<number>(() => {
     const val = localStorage.getItem('memocard_question_font_size');
     return val ? parseInt(val, 10) : 28;
   });
-  const [answerFontSize] = useState<number>(() => {
+  const [answerFontSize, setAnswerFontSize] = useState<number>(() => {
     const val = localStorage.getItem('memocard_answer_font_size');
     return val ? parseInt(val, 10) : 28;
   });
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [previewSide, setPreviewSide] = useState<'front' | 'back'>('front');
 
   const handleToggleForeverMode = (val: boolean) => {
     setForeverMode(val);
@@ -399,21 +402,11 @@ export function ReviewScreen({
 
     const loadReviewCards = async () => {
       try {
-        const loadedCards = await getCardsOnce(deck.id);
+        const loadedCards = await getDueCards(deck.id);
         if (!isMounted) return;
 
-        const now = new Date();
-        // Filter cards that are due for review
-        const due = loadedCards.filter(card => {
-          if (!card.nextReview) return true;
-          const reviewDate = typeof card.nextReview.toDate === 'function'
-            ? card.nextReview.toDate()
-            : new Date((card.nextReview as any).seconds * 1000);
-          return reviewDate <= now;
-        });
-
         // Shuffle due cards
-        const shuffledDue = [...due].sort(() => Math.random() - 0.5);
+        const shuffledDue = [...loadedCards].sort(() => Math.random() - 0.5);
 
         setSessionQueue(shuffledDue);
         setLoading(false);
@@ -428,7 +421,7 @@ export function ReviewScreen({
     return () => {
       isMounted = false;
     };
-  }, [deck.id]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deck.id, getDueCards]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   const handleScore = async (quality: number) => {
     console.log("handleScore called. Card:", currentCard?.front, "Quality:", quality);
@@ -443,7 +436,8 @@ export function ReviewScreen({
     try {
       // Persist card score to database
       console.log("Calling scoreCard for:", currentCard.id);
-      await scoreCard(deck.id, currentCard.id, currentCard, quality);
+      const deckHasStats = deck.masteredCount !== undefined && deck.easeCount !== undefined;
+      await scoreCard(deck.id, currentCard.id, currentCard, quality, deckHasStats);
       console.log("scoreCard returned for:", currentCard.id);
 
       // Update queue/completed count immediately
@@ -491,67 +485,118 @@ export function ReviewScreen({
       onClick={handleContainerClick}
       style={{ cursor: !isFlipped ? 'pointer' : 'default', minHeight: '100vh' }}
     >
-      {/* Navigation */}
-      <div className="navigation-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-        <button className="back-link" onClick={(e) => { e.stopPropagation(); onBack(); }}>
-          <ArrowLeft size={16} />
-          <span>End Session</span>
+      {/* Navigation Header */}
+      <div 
+        className="navigation-bar glass" 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          width: '100%',
+          padding: '8px 16px',
+          borderRadius: '16px',
+          marginBottom: '24px',
+          border: '1px solid var(--border-light)',
+          background: 'rgba(255, 255, 255, 0.02)',
+          boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
+          backdropFilter: 'blur(5px)',
+          WebkitBackdropFilter: 'blur(5px)'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Left Side: Exit/Dashboard Shortcut */}
+        <button 
+          className="back-link" 
+          onClick={(e) => { e.stopPropagation(); onBack(); }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+            fontWeight: 500,
+            transition: 'color 0.2s ease',
+            padding: '4px 8px'
+          }}
+          title="Powrót do zarządzania talią"
+        >
+          <LayoutDashboard size={18} />
+          <span style={{ display: 'inline-block' }}>Talia: <strong>{deck.name}</strong></span>
         </button>
 
-        {/* Remembered Forever Mode Toggle & Details Toggle */}
+        {/* Right Side: Toolbar cluster (details, forever mode, settings) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Details toggle */}
-          <label style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            color: 'var(--text-secondary)',
-            userSelect: 'none',
-            background: showStudyDetails ? 'rgba(99, 102, 241, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-            border: `1px solid ${showStudyDetails ? 'rgba(99, 102, 241, 0.3)' : 'var(--border-light)'}`,
-            padding: '6px 12px',
-            borderRadius: '99px',
-            transition: 'all 0.2s ease',
-          }}>
-            <input 
-              type="checkbox" 
-              checked={showStudyDetails}
-              onChange={(e) => handleToggleShowStudyDetails(e.target.checked)}
-              onClick={(e) => e.stopPropagation()}
-              style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--primary)' }}
-            />
-            <span style={{ fontWeight: 500, color: showStudyDetails ? 'var(--primary)' : 'var(--text-primary)' }}>
-              Szczegóły
-            </span>
-          </label>
+          {/* Details (Eye icon button) */}
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleToggleShowStudyDetails(!showStudyDetails); }}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              cursor: 'pointer',
+              borderRadius: '50%',
+              background: showStudyDetails ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+              border: `1px solid ${showStudyDetails ? 'rgba(99, 102, 241, 0.4)' : 'var(--border-light)'}`,
+              color: showStudyDetails ? 'var(--primary)' : 'var(--text-secondary)',
+              transition: 'all 0.2s ease',
+            }}
+            title={showStudyDetails ? "Ukryj szczegóły powtórek" : "Pokaż szczegóły powtórek"}
+          >
+            {showStudyDetails ? <Eye size={18} /> : <EyeOff size={18} />}
+          </button>
 
-          <label style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            color: 'var(--text-secondary)',
-            userSelect: 'none',
-            background: foreverMode ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-            border: `1px solid ${foreverMode ? 'rgba(168, 85, 247, 0.3)' : 'var(--border-light)'}`,
-            padding: '6px 12px',
-            borderRadius: '99px',
-            transition: 'all 0.2s ease',
-          }}>
-            <input 
-              type="checkbox" 
-              checked={foreverMode}
-              onChange={(e) => handleToggleForeverMode(e.target.checked)}
-              onClick={(e) => e.stopPropagation()}
-              style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: 'var(--color-forever)' }}
-            />
-            <span style={{ fontWeight: 500, color: foreverMode ? 'var(--color-forever)' : 'var(--text-primary)' }}>
-              Forever Mode
-            </span>
-          </label>
+          {/* Forever Mode (Infinity icon button) */}
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleToggleForeverMode(!foreverMode); }}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              cursor: 'pointer',
+              borderRadius: '50%',
+              background: foreverMode ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+              border: `1px solid ${foreverMode ? 'rgba(168, 85, 247, 0.4)' : 'var(--border-light)'}`,
+              color: foreverMode ? 'var(--color-forever)' : 'var(--text-secondary)',
+              transition: 'all 0.2s ease',
+            }}
+            title={foreverMode ? "Wyłącz Forever Mode" : "Włącz Forever Mode"}
+          >
+            <Infinity size={18} />
+          </button>
+
+          {/* Divider */}
+          <div style={{ width: '1px', height: '20px', background: 'rgba(255, 255, 255, 0.1)', margin: '0 4px' }}></div>
+
+          {/* Settings gear icon */}
+          <button 
+            type="button"
+            className="settings-btn"
+            onClick={(e) => { e.stopPropagation(); setShowSettingsModal(true); }}
+            style={{ 
+              width: '36px',
+              height: '36px',
+              margin: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-secondary)'
+            }}
+            title="Ustawienia nauki"
+          >
+            <Settings size={18} />
+          </button>
         </div>
       </div>
 
@@ -684,6 +729,197 @@ export function ReviewScreen({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* App Settings Modal in ReviewScreen */}
+      {showSettingsModal && (
+        <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowSettingsModal(false); }}>
+          <div className="modal-content glass animate-fade-in" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={20} style={{ color: 'var(--primary)' }} />
+                Ustawienia nauki
+              </h3>
+              <button className="close-btn" onClick={() => setShowSettingsModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Question Font Size Slider */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Rozmiar czcionki pytania</label>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{questionFontSize}px</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="16" 
+                  max="48" 
+                  value={questionFontSize} 
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setQuestionFontSize(val);
+                    localStorage.setItem('memocard_question_font_size', String(val));
+                  }}
+                  style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Answer Font Size Slider */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Rozmiar czcionki odpowiedzi</label>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{answerFontSize}px</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="16" 
+                  max="48" 
+                  value={answerFontSize} 
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setAnswerFontSize(val);
+                    localStorage.setItem('memocard_answer_font_size', String(val));
+                  }}
+                  style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Toggle details directly in settings */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ paddingRight: '16px' }}>
+                  <label className="form-label" style={{ marginBottom: '2px', cursor: 'pointer', display: 'block' }}>Pokazuj szczegóły powtórek na przyciskach</label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8, margin: 0, lineHeight: '1.3' }}>Wyświetla czas do kolejnej powtórki oraz zmianę wskaźnika łatwości (SM-2).</p>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={showStudyDetails} 
+                  onChange={(e) => handleToggleShowStudyDetails(e.target.checked)}
+                  style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }}
+                />
+              </div>
+
+              {/* Toggle forever mode directly in settings */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(255, 255, 255, 0.08)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ paddingRight: '16px' }}>
+                  <label className="form-label" style={{ marginBottom: '2px', cursor: 'pointer', display: 'block' }}>Tryb Forever Mode</label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8, margin: 0, lineHeight: '1.3' }}>Pozwala na trwałe oznaczenie kart jako zapamiętanych (9999 rok).</p>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={foreverMode} 
+                  onChange={(e) => handleToggleForeverMode(e.target.checked)}
+                  style={{ width: '18px', height: '18px', accentColor: 'var(--color-forever)', cursor: 'pointer', flexShrink: 0 }}
+                />
+              </div>
+
+              {/* Visualization of the card */}
+              <div style={{ marginTop: '10px' }}>
+                <span className="form-label" style={{ marginBottom: '10px' }}>Podgląd karty</span>
+                
+                {/* Tabs to select Front / Back preview */}
+                <div style={{
+                  display: 'flex',
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  borderRadius: '10px',
+                  padding: '3px',
+                  marginBottom: '12px'
+                }}>
+                  <button 
+                    type="button"
+                    onClick={() => setPreviewSide('front')}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      background: previewSide === 'front' ? 'var(--primary)' : 'transparent',
+                      color: previewSide === 'front' ? 'white' : 'var(--text-secondary)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Pytanie (Awers)
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setPreviewSide('back')}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      background: previewSide === 'back' ? 'var(--primary)' : 'transparent',
+                      color: previewSide === 'back' ? 'white' : 'var(--text-secondary)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Odpowiedź (Rewers)
+                  </button>
+                </div>
+
+                {/* Card Container Preview */}
+                <div 
+                  className={`flashcard-container ${previewSide === 'back' ? 'is-flipped' : ''}`}
+                  style={{ 
+                    height: 'auto', 
+                    minHeight: '160px', 
+                    marginBottom: 0, 
+                    pointerEvents: 'none'
+                  }}
+                >
+                  <div className="flashcard-inner" style={{ height: 'auto', minHeight: 'inherit' }}>
+                    {/* Front preview */}
+                    <div className="flashcard-face flashcard-front" style={{ minHeight: '160px', height: 'auto', padding: '20px' }}>
+                      <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>
+                        Jak nazywa się stolica Francji?
+                      </span>
+                    </div>
+
+                    {/* Back preview */}
+                    <div className="flashcard-face flashcard-back" style={{ minHeight: '160px', height: 'auto', padding: '20px', paddingTop: '45px' }}>
+                      <div style={{
+                        position: 'absolute',
+                        top: '12px',
+                        left: '12px',
+                        right: '12px',
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                        opacity: 0.7,
+                        textAlign: 'center',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                        paddingBottom: '4px',
+                        fontStyle: 'italic'
+                      }}>
+                        Jak nazywa się stolica Francji?
+                      </div>
+                      <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>
+                        Paryż
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-actions" style={{ marginTop: '10px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ width: '100%' }}
+                  onClick={() => setShowSettingsModal(false)}
+                >
+                  Zamknij
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

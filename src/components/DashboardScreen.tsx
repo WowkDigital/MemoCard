@@ -22,7 +22,7 @@ export function DashboardScreen({
   onStartReview,
   showToast
 }: DashboardScreenProps) {
-  const { decks, loadingDecks, addDeck, importDeck, cloneSharedDeck, getCardsOnce } = useFirestore(user.uid);
+  const { decks, loadingDecks, addDeck, importDeck, cloneSharedDeck, getCardsOnce, getDueCount, healDeckStats } = useFirestore(user.uid);
   
   const [deckStats, setDeckStats] = useState<Record<string, { total: number; due: number; mastered: number; ease: string }>>({});
   const [expandedDecks, setExpandedDecks] = useState<Record<string, boolean>>({});
@@ -59,46 +59,74 @@ export function DashboardScreen({
         return;
       }
 
-      // Fetch cards with cache-first and background server check
-      getCardsOnce(deck.id, (loadedCards: Card[]) => {
-        const total = loadedCards.length;
-        let due = 0;
-        let mastered = 0;
-        let totalEase = 0;
-        let easeCount = 0;
-        const now = new Date();
+      // Check if deck has the precalculated stats
+      const hasStatsInDeck = deck.easeCount !== undefined && deck.masteredCount !== undefined;
 
-        loadedCards.forEach(card => {
-          if (card.nextReview) {
-            const reviewDate = typeof card.nextReview.toDate === 'function' 
-              ? card.nextReview.toDate() 
-              : new Date((card.nextReview as any).seconds * 1000);
-            if (reviewDate <= now) {
+      if (hasStatsInDeck) {
+        // Fetch ONLY the count of due cards (uses server-side aggregation - extremely cheap and fast!)
+        getDueCount(deck.id).then((due) => {
+          const total = deck.cardCount || 0;
+          const mastered = deck.masteredCount || 0;
+          const easeCount = deck.easeCount || 0;
+          const totalEase = deck.totalEaseFactor || 0;
+          const ease = easeCount > 0 ? (totalEase / easeCount).toFixed(2) : '2.50';
+
+          setDeckStats(prev => ({
+            ...prev,
+            [deck.id]: { total, due, mastered, ease }
+          }));
+        }).catch((err) => {
+          console.error("Error fetching due count:", err);
+        });
+      } else {
+        // Fallback for old/unmigrated decks: fetch cards, calculate stats, and trigger background self-healing/migration
+        getCardsOnce(deck.id, (loadedCards: Card[]) => {
+          const total = loadedCards.length;
+          let due = 0;
+          let mastered = 0;
+          let totalEase = 0;
+          let easeCount = 0;
+          const now = new Date();
+
+          loadedCards.forEach(card => {
+            if (card.nextReview) {
+              const reviewDate = typeof card.nextReview.toDate === 'function' 
+                ? card.nextReview.toDate() 
+                : new Date((card.nextReview as any).seconds * 1000);
+              if (reviewDate <= now) {
+                due++;
+              }
+            } else {
               due++;
             }
-          } else {
-            due++;
-          }
 
-          if (card.repetitions > 0 && card.interval >= 7) {
-            mastered++;
-          }
+            if (card.repetitions > 0 && card.interval >= 7) {
+              mastered++;
+            }
 
-          if (card.easeFactor) {
-            totalEase += card.easeFactor;
-            easeCount++;
-          }
+            if (card.easeFactor) {
+              totalEase += card.easeFactor;
+              easeCount++;
+            }
+          });
+
+          const ease = easeCount > 0 ? (totalEase / easeCount).toFixed(2) : '2.50';
+
+          setDeckStats(prev => ({
+            ...prev,
+            [deck.id]: { total, due, mastered, ease }
+          }));
+
+          // Self-heal/migrate the deck metadata doc in Firestore
+          healDeckStats(deck.id, {
+            masteredCount: mastered,
+            easeCount: easeCount,
+            totalEaseFactor: totalEase
+          });
         });
-
-        const ease = easeCount > 0 ? (totalEase / easeCount).toFixed(2) : '2.50';
-
-        setDeckStats(prev => ({
-          ...prev,
-          [deck.id]: { total, due, mastered, ease }
-        }));
-      });
+      }
     });
-  }, [decks, loadingDecks]);
+  }, [decks, loadingDecks, getDueCount, getCardsOnce, healDeckStats]);
 
   useEffect(() => {
     if ((window as any).WowkDigitalFooter) {

@@ -17,6 +17,7 @@ import {
   getDocs,
   getDocsFromCache,
   getDocsFromServer,
+  getCountFromServer,
   where
 } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
@@ -36,6 +37,9 @@ export interface Deck {
   ownerId?: string;
   isShared?: boolean;
   visibility?: 'private' | 'public' | 'guest';
+  masteredCount?: number;
+  totalEaseFactor?: number;
+  easeCount?: number;
 }
 
 export interface Card {
@@ -106,7 +110,7 @@ export function useFirestore(userId: string | undefined) {
       setLoadingDecks(false);
     });
 
-    // Subscribe to shared/public/guest decks
+    // Fetch shared/public/guest decks once (one-time query instead of real-time listener to optimize database reads)
     let sharedQuery;
     if (isOwner) {
       sharedQuery = collectionGroup(db, 'decks');
@@ -116,7 +120,7 @@ export function useFirestore(userId: string | undefined) {
       sharedQuery = query(collectionGroup(db, 'decks'), where('visibility', 'in', ['public', 'guest']));
     }
 
-    const unsubscribeShared = onSnapshot(sharedQuery, (snapshot) => {
+    getDocs(sharedQuery).then((snapshot) => {
       sharedDecks = snapshot.docs.map(doc => {
         const pathParts = doc.ref.path.split('/');
         const ownerId = pathParts[1];
@@ -128,14 +132,13 @@ export function useFirestore(userId: string | undefined) {
         };
       }) as Deck[];
       updateCombinedDecks();
-    }, (error) => {
+    }).catch((error) => {
       console.error("Error fetching shared decks:", error);
       updateCombinedDecks();
     });
 
     return () => {
       unsubscribeOwn();
-      unsubscribeShared();
     };
   }, [userId]);
 
@@ -201,21 +204,33 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
-  // 5. Delete card from deck
-  const deleteCard = async (deckId: string, cardId: string) => {
+  // 5. Delete card from deck and update stats
+  const deleteCard = async (deckId: string, cardOrId: string | Card) => {
     if (!userId) return;
     try {
       // Inwalidacja pamięci podręcznej synchronizacji dla tej talii
       delete serverSyncCache[deckId];
 
+      const cardId = typeof cardOrId === 'string' ? cardOrId : cardOrId.id;
       const cardDocRef = doc(db, 'users', userId, 'decks', deckId, 'cards', cardId);
       await deleteDoc(cardDocRef);
 
-      // Decrement card count in the deck
+      // Decrement card count and stats in the deck
       const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
-      await updateDoc(deckDocRef, {
-        cardCount: increment(-1)
-      });
+      if (typeof cardOrId !== 'string') {
+        const isMastered = cardOrId.repetitions > 0 && cardOrId.interval >= 7;
+        const easeVal = cardOrId.easeFactor || 2.5;
+        await updateDoc(deckDocRef, {
+          cardCount: increment(-1),
+          masteredCount: increment(isMastered ? -1 : 0),
+          easeCount: increment(-1),
+          totalEaseFactor: increment(-easeVal)
+        });
+      } else {
+        await updateDoc(deckDocRef, {
+          cardCount: increment(-1)
+        });
+      }
     } catch (error) {
       console.error("Error deleting card:", error);
       throw error;
@@ -301,9 +316,59 @@ export function useFirestore(userId: string | undefined) {
     }
   }, [userId]);
 
-  // 7. Update SRS parameters after scoring a card (SuperMemo-2 SM-2)
+  // 6c. Pobieranie liczby kart do powtórki (agregacja na serwerze - oszczędza odczyty bazy)
+  const getDueCount = useCallback(async (deckId: string) => {
+    if (!userId) return 0;
+    const cardsRef = collection(db, 'users', userId, 'decks', deckId, 'cards');
+    const now = new Date();
+    const q = query(cardsRef, where('nextReview', '<=', Timestamp.fromDate(now)));
+    try {
+      const snapshot = await getCountFromServer(q);
+      return snapshot.data().count;
+    } catch (err) {
+      console.warn("Błąd pobierania liczby kart z serwera (offline?), próba z cache:", err);
+      try {
+        const cacheSnapshot = await getDocsFromCache(q);
+        return cacheSnapshot.size;
+      } catch (cacheErr) {
+        console.error("Błąd pobierania z cache:", cacheErr);
+        return 0;
+      }
+    }
+  }, [userId]);
+
+  // 6d. Pobieranie wyłącznie kart do powtórki (zapobiega pobieraniu całej talii)
+  const getDueCards = useCallback(async (deckId: string) => {
+    if (!userId) return [];
+    const cardsRef = collection(db, 'users', userId, 'decks', deckId, 'cards');
+    const now = new Date();
+    const q = query(cardsRef, where('nextReview', '<=', Timestamp.fromDate(now)));
+
+    try {
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Card[];
+    } catch (err) {
+      console.error("Błąd pobierania kart do powtórki:", err);
+      // Fallback: pobierz z cache
+      try {
+        const cacheSnapshot = await getDocsFromCache(q);
+        return cacheSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Card[];
+      } catch (cacheErr) {
+        console.error("Błąd pobierania kart do powtórki z cache:", cacheErr);
+        return [];
+      }
+    }
+  }, [userId]);
+
+  // 7. Update SRS parameters after scoring a card (SuperMemo-2 SM-2) and update deck statistics
   // quality: 1 (Again), 3 (Hard), 4 (Good), 5 (Easy)
-  const scoreCard = async (deckId: string, cardId: string, currentCard: Card, quality: number) => {
+  const scoreCard = async (deckId: string, cardId: string, currentCard: Card, quality: number, deckHasStats?: boolean) => {
     if (!userId) return;
     try {
       // Inwalidacja pamięci podręcznej synchronizacji dla tej talii
@@ -312,6 +377,8 @@ export function useFirestore(userId: string | undefined) {
       let nextRepetitions = currentCard.repetitions;
       let nextInterval = currentCard.interval;
       let nextEaseFactor = currentCard.easeFactor;
+
+      const wasMastered = currentCard.repetitions > 0 && currentCard.interval >= 7;
 
       if (quality === 6) {
         // Forever mode: set an extremely large interval and nextReview far in the future
@@ -324,6 +391,15 @@ export function useFirestore(userId: string | undefined) {
           easeFactor: nextEaseFactor,
           nextReview: Timestamp.fromDate(nextReviewDate)
         });
+
+        if (deckHasStats) {
+          const isMastered = true;
+          const masteredDiff = (isMastered ? 1 : 0) - (wasMastered ? 1 : 0);
+          const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
+          await updateDoc(deckDocRef, {
+            masteredCount: increment(masteredDiff)
+          });
+        }
         return;
       }
 
@@ -344,10 +420,12 @@ export function useFirestore(userId: string | undefined) {
       }
 
       // Update easeFactor
+      const prevEaseFactor = nextEaseFactor;
       nextEaseFactor = nextEaseFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
       if (nextEaseFactor < 1.3) {
         nextEaseFactor = 1.3;
       }
+      nextEaseFactor = Number(nextEaseFactor.toFixed(2));
 
       // Calculate next review date
       const now = new Date();
@@ -357,9 +435,20 @@ export function useFirestore(userId: string | undefined) {
       await updateDoc(cardDocRef, {
         repetitions: nextRepetitions,
         interval: nextInterval,
-        easeFactor: Number(nextEaseFactor.toFixed(2)),
+        easeFactor: nextEaseFactor,
         nextReview: Timestamp.fromDate(nextReviewDate)
       });
+
+      if (deckHasStats) {
+        const isMastered = nextRepetitions > 0 && nextInterval >= 7;
+        const masteredDiff = (isMastered ? 1 : 0) - (wasMastered ? 1 : 0);
+        const easeDiff = nextEaseFactor - prevEaseFactor;
+        const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
+        await updateDoc(deckDocRef, {
+          masteredCount: increment(masteredDiff),
+          totalEaseFactor: increment(easeDiff)
+        });
+      }
     } catch (error) {
       console.error("Error scoring card:", error);
       throw error;
@@ -400,14 +489,23 @@ export function useFirestore(userId: string | undefined) {
 
       const batches = [];
       
+      // Calculate stats for imported cards
+      const totalCards = cardsList.length;
+      const masteredCount = 0; // new cards are not mastered
+      const easeCount = totalCards;
+      const totalEaseFactor = totalCards * 2.5; // default ease factor is 2.5
+
       // 1. Pierwszy wsad z dokumentem talii oraz pierwszym pakietem kart
       const firstBatch = writeBatch(db);
       firstBatch.set(deckDocRef, {
         name,
         description,
         createdAt: serverTimestamp(),
-        cardCount: cardsList.length,
-        visibility: 'private'
+        cardCount: totalCards,
+        visibility: 'private',
+        masteredCount,
+        easeCount,
+        totalEaseFactor
       });
 
       const firstChunk = cardsList.slice(0, chunkSize);
@@ -510,11 +608,24 @@ export function useFirestore(userId: string | undefined) {
         }
       });
 
-      // 2. Aktualizacja liczby kart w dokumencie talii
+      // 2. Aktualizacja liczby kart w dokumencie talii i statystyk
       const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
-      await updateDoc(deckDocRef, {
-        cardCount: increment(cardsList.length)
-      });
+      const deckDoc = await getDoc(deckDocRef);
+      if (deckDoc.exists()) {
+        const deckData = deckDoc.data();
+        const hasStats = deckData.masteredCount !== undefined && deckData.totalEaseFactor !== undefined;
+        if (hasStats) {
+          await updateDoc(deckDocRef, {
+            cardCount: increment(cardsList.length),
+            easeCount: increment(cardsList.length),
+            totalEaseFactor: increment(cardsList.length * 2.5)
+          });
+        } else {
+          await updateDoc(deckDocRef, {
+            cardCount: increment(cardsList.length)
+          });
+        }
+      }
 
       // 3. Ponowne wyczyszczenie cache po zakończeniu zapisu
       delete serverSyncCache[deckId];
@@ -554,7 +665,10 @@ export function useFirestore(userId: string | undefined) {
         description: deckData.description || '',
         createdAt: serverTimestamp(),
         cardCount: cardsList.length,
-        visibility: 'private'
+        visibility: 'private',
+        masteredCount: 0,
+        easeCount: cardsList.length,
+        totalEaseFactor: cardsList.length * 2.5
       });
 
       const firstChunk = cardsList.slice(0, chunkSize);
@@ -630,6 +744,17 @@ export function useFirestore(userId: string | undefined) {
     }
   };
 
+  // Self-healing function to update deck statistics for older decks
+  const healDeckStats = useCallback(async (deckId: string, stats: { masteredCount: number; easeCount: number; totalEaseFactor: number }) => {
+    if (!userId) return;
+    try {
+      const deckDocRef = doc(db, 'users', userId, 'decks', deckId);
+      await updateDoc(deckDocRef, stats);
+    } catch (error) {
+      console.error("Error healing deck stats:", error);
+    }
+  }, [userId]);
+
   return {
     decks,
     loadingDecks,
@@ -639,10 +764,13 @@ export function useFirestore(userId: string | undefined) {
     deleteCard,
     subscribeToCards,
     getCardsOnce,
+    getDueCount,
+    getDueCards,
     scoreCard,
     importDeck,
     importCards,
     cloneSharedDeck,
-    updateDeck
+    updateDeck,
+    healDeckStats
   };
 }

@@ -180,9 +180,9 @@ export function DeckManageScreen({
     return d.toLocaleDateString(undefined, { weekday: 'short' });
   };
 
-  const handleDeleteCard = async (cardId: string) => {
+  const handleDeleteCard = async (card: Card) => {
     try {
-      await deleteCard(deck.id, cardId);
+      await deleteCard(deck.id, card);
       showToast('Card deleted.', 'success');
     } catch (err) {
       console.error(err);
@@ -420,7 +420,7 @@ Goodbye;Do widzenia
                   </div>
                   <button 
                     className="delete-icon-btn" 
-                    onClick={() => handleDeleteCard(card.id)}
+                    onClick={() => handleDeleteCard(card)}
                     title="Delete flashcard"
                   >
                     <Trash2 size={16} />
