@@ -21,6 +21,26 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script src="https://cdn.jsdelivr.net/gh/WowkDigital/WowkDigitalFooter@latest/wowk-digital-footer.js"></script>
+    <script>
+      const initFooter = () => {
+        if (typeof WowkDigitalFooter !== 'undefined') {
+          WowkDigitalFooter.init({
+            siteName: 'MemoCard',
+            container: 'body',
+            brandName: 'Wowk Digital',
+            brandUrl: 'https://github.com/WowkDigital',
+            showHubLink: true,
+            hubUrl: 'https://wowkdigital.github.io/WD_HUB/'
+          });
+        }
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initFooter);
+      } else {
+        initFooter();
+      }
+    </script>
   </body>
 </html>
 

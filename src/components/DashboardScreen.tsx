@@ -128,18 +128,6 @@ export function DashboardScreen({
     });
   }, [decks, loadingDecks, getDueCount, getCardsOnce, healDeckStats]);
 
-  useEffect(() => {
-    if ((window as any).WowkDigitalFooter) {
-      (window as any).WowkDigitalFooter.init({
-        siteName: 'MemoCard',
-        container: '#wowk-footer-container',
-        brandName: 'Wowk Digital',
-        brandUrl: 'https://github.com/WowkDigital',
-        showHubLink: true,
-        hubUrl: 'https://wowkdigital.github.io/WD_HUB/'
-      });
-    }
-  }, []);
 
   const forceUpdateApp = async () => {
     // Unregister service workers
@@ -732,8 +720,6 @@ export function DashboardScreen({
         )}
       </main>
 
-      {/* Footer Container */}
-      <div id="wowk-footer-container" style={{ width: '100%', marginTop: 'auto' }}></div>
 
       {/* Add Deck Modal */}
       {showAddModal && (

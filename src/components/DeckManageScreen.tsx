@@ -83,19 +83,6 @@ export function DeckManageScreen({
     return unsubscribe;
   }, [deck.id, subscribeToCards]);
 
-  // Initialize footer
-  useEffect(() => {
-    if ((window as any).WowkDigitalFooter) {
-      (window as any).WowkDigitalFooter.init({
-        siteName: 'MemoCard',
-        container: '#wowk-footer-container',
-        brandName: 'Wowk Digital',
-        brandUrl: 'https://github.com/WowkDigital',
-        showHubLink: true,
-        hubUrl: 'https://wowkdigital.github.io/WD_HUB/'
-      });
-    }
-  }, []);
 
   // Helper to safely parse Firebase/local Timestamps or Javascript Dates
   const getCardReviewDate = (card: Card): Date => {
@@ -796,8 +783,6 @@ Goodbye;Do widzenia
         </div>
       )}
 
-      {/* Footer Container */}
-      <div id="wowk-footer-container" style={{ width: '100%', marginTop: 'auto' }}></div>
 
       {/* Import Progress Overlay */}
       {isImporting && (
