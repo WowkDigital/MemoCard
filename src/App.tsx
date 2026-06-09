@@ -5,9 +5,10 @@ import { LoginScreen } from './components/LoginScreen';
 import { DashboardScreen } from './components/DashboardScreen';
 import { DeckManageScreen } from './components/DeckManageScreen';
 import { ReviewScreen } from './components/ReviewScreen';
+import { AddDeckScreen } from './components/AddDeckScreen';
 import { Toast } from './components/Toast';
 
-type Screen = 'DASHBOARD' | 'DECK_MANAGE' | 'REVIEW';
+type Screen = 'DASHBOARD' | 'DECK_MANAGE' | 'REVIEW' | 'ADD_DECK';
 
 function App() {
   const { user, loading: authLoading, error: authError, loginWithGoogle, loginAnonymously, logout } = useAuth();
@@ -57,6 +58,9 @@ function App() {
             setSelectedDeck(deck);
             setScreen('REVIEW');
           }} 
+          onNavigateToAddDeck={() => {
+            setScreen('ADD_DECK');
+          }}
           showToast={showToast}
         />
       )}
@@ -86,6 +90,16 @@ function App() {
             setScreen('DASHBOARD');
             setSelectedDeck(null);
           }} 
+        />
+      )}
+
+      {screen === 'ADD_DECK' && (
+        <AddDeckScreen 
+          user={user}
+          onBack={() => {
+            setScreen('DASHBOARD');
+          }}
+          showToast={showToast}
         />
       )}
 
