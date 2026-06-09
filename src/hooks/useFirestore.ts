@@ -18,7 +18,8 @@ import {
   getDocsFromCache,
   getDocsFromServer,
   getCountFromServer,
-  where
+  where,
+  limit
 } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 
@@ -238,10 +239,12 @@ export function useFirestore(userId: string | undefined) {
   };
 
   // 6. Subscribe to all cards from a given deck
-  const subscribeToCards = (deckId: string, callback: (cards: Card[]) => void) => {
+  const subscribeToCards = (deckId: string, callback: (cards: Card[]) => void, limitCount?: number) => {
     if (!userId) return () => {};
     const cardsRef = collection(db, 'users', userId, 'decks', deckId, 'cards');
-    const q = query(cardsRef, orderBy('createdAt', 'desc'));
+    const q = limitCount 
+      ? query(cardsRef, orderBy('createdAt', 'desc'), limit(limitCount))
+      : query(cardsRef, orderBy('createdAt', 'desc'));
     
     return onSnapshot(q, (snapshot) => {
       const cardsList = snapshot.docs.map(doc => ({

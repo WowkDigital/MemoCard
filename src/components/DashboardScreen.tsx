@@ -29,11 +29,36 @@ export function DashboardScreen({
   const [sortBy, setSortBy] = useState<string>(() => {
     return localStorage.getItem('memocard_sort_by') || 'recommended';
   });
+  const [isSortOpen, setIsSortOpen] = useState(false);
 
   const handleSortChange = (newSort: string) => {
     setSortBy(newSort);
     localStorage.setItem('memocard_sort_by', newSort);
   };
+
+  const toggleSortDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsSortOpen(prev => !prev);
+  };
+
+  useEffect(() => {
+    if (!isSortOpen) return;
+    const handleClose = () => setIsSortOpen(false);
+    document.addEventListener('click', handleClose);
+    return () => document.removeEventListener('click', handleClose);
+  }, [isSortOpen]);
+
+  const sortOptions = [
+    { value: 'recommended', label: 'Do nauki (Sugerowane)', icon: '💡' },
+    { value: 'due-desc', label: 'Do powtórki (Najwięcej)', icon: '📅' },
+    { value: 'total-desc', label: 'Ilość kart (Najwięcej)', icon: '📚' },
+    { value: 'name-asc', label: 'Nazwa (A-Z)', icon: '🔤' },
+    { value: 'name-desc', label: 'Nazwa (Z-A)', icon: '🔤' },
+    { value: 'created-desc', label: 'Najnowsze', icon: '🆕' },
+    { value: 'created-asc', label: 'Najstarsze', icon: '⏳' },
+  ];
+
+  const currentOption = sortOptions.find(o => o.value === sortBy) || sortOptions[0];
 
   const toggleDeckExpand = (deckId: string) => {
     setExpandedDecks(prev => ({
@@ -92,7 +117,7 @@ export function DashboardScreen({
             if (card.nextReview) {
               const reviewDate = typeof card.nextReview.toDate === 'function' 
                 ? card.nextReview.toDate() 
-                : new Date((card.nextReview as any).seconds * 1000);
+                : new Date((card.nextReview as unknown as { seconds: number }).seconds * 1000);
               if (reviewDate <= now) {
                 due++;
               }
@@ -162,13 +187,13 @@ export function DashboardScreen({
     if (typeof deck.createdAt.toDate === 'function') {
       date = deck.createdAt.toDate();
     } else {
-      const ca = deck.createdAt as any;
+      const ca = deck.createdAt as unknown as { seconds?: number } | Date;
       if (ca instanceof Date) {
         date = ca;
-      } else if (ca.seconds !== undefined) {
+      } else if (ca && typeof ca === 'object' && 'seconds' in ca && typeof ca.seconds === 'number') {
         date = new Date(ca.seconds * 1000);
       } else {
-        date = new Date(ca);
+        date = new Date(ca as unknown as string);
       }
     }
     return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
@@ -301,9 +326,10 @@ export function DashboardScreen({
       setImportName('');
       setImportDesc('');
       setShowImportModal(false);
-    } catch (err: any) {
-      console.error(err);
-      setImportError(err.message || 'Invalid data format.');
+    } catch (err) {
+      const error = err as Error;
+      console.error(error);
+      setImportError(error.message || 'Invalid data format.');
       showToast('Failed to import deck.', 'error');
     } finally {
       setIsImporting(false);
@@ -372,10 +398,10 @@ export function DashboardScreen({
     const getMs = (deck: Deck) => {
       if (!deck.createdAt) return 0;
       if (typeof deck.createdAt.toDate === 'function') return deck.createdAt.toDate().getTime();
-      const ca = deck.createdAt as any;
+      const ca = deck.createdAt as unknown as { seconds?: number } | Date;
       if (ca instanceof Date) return ca.getTime();
-      if (ca.seconds !== undefined) return ca.seconds * 1000;
-      return new Date(ca).getTime();
+      if (ca && typeof ca === 'object' && 'seconds' in ca && typeof ca.seconds === 'number') return ca.seconds * 1000;
+      return new Date(ca as unknown as string).getTime();
     };
 
     if (sortBy === 'created-desc') {
@@ -498,48 +524,107 @@ export function DashboardScreen({
             background: 'rgba(255, 255, 255, 0.02)',
             border: '1px solid var(--border-light)',
             borderRadius: '12px',
-            fontSize: '0.85rem'
+            fontSize: '0.85rem',
+            position: 'relative'
           }}>
             <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
               <SlidersHorizontal size={14} style={{ color: 'var(--primary)' }} />
               Sortowanie
             </span>
-            <select
-              value={sortBy}
-              onChange={(e) => handleSortChange(e.target.value)}
-              style={{
-                background: 'rgba(0, 0, 0, 0.3)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-light)',
-                borderRadius: '8px',
-                padding: '6px 10px',
-                fontSize: '0.85rem',
-                outline: 'none',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
-                transition: 'all 0.2s ease',
-                width: 'auto',
-                WebkitAppearance: 'none',
-                MozAppearance: 'none',
-                appearance: 'none',
-                textAlign: 'right',
-                paddingRight: '18px',
-                backgroundImage: 'url("data:image/svg+xml;utf8,<svg fill=\'%239ca3af\' height=\'24\' viewBox=\'0 0 24 24\' width=\'24\' xmlns=\'http://www.w3.org/2000/svg\'><path d=\'M7 10l5 5 5-5z\'/></svg>")',
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right -4px center',
-                backgroundSize: '18px'
-              }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--primary)'}
-              onBlur={(e) => e.target.style.borderColor = 'var(--border-light)'}
-            >
-              <option value="recommended" style={{ background: '#111827', color: '#f3f4f6' }}>💡 Do nauki (Sugerowane)</option>
-              <option value="due-desc" style={{ background: '#111827', color: '#f3f4f6' }}>📅 Do powtórki (Najwięcej)</option>
-              <option value="total-desc" style={{ background: '#111827', color: '#f3f4f6' }}>📚 Ilość kart (Najwięcej)</option>
-              <option value="name-asc" style={{ background: '#111827', color: '#f3f4f6' }}>🔤 Nazwa (A-Z)</option>
-              <option value="name-desc" style={{ background: '#111827', color: '#f3f4f6' }}>🔤 Nazwa (Z-A)</option>
-              <option value="created-desc" style={{ background: '#111827', color: '#f3f4f6' }}>🆕 Najnowsze</option>
-              <option value="created-asc" style={{ background: '#111827', color: '#f3f4f6' }}>⏳ Najstarsze</option>
-            </select>
+            
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={toggleSortDropdown}
+                className="glass"
+                style={{
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  transition: 'all 0.2s ease',
+                  userSelect: 'none',
+                  fontWeight: 500
+                }}
+              >
+                <span>{currentOption.icon}</span>
+                <span>{currentOption.label}</span>
+                <span style={{ fontSize: '0.65rem', opacity: 0.7, marginLeft: '4px' }}>▼</span>
+              </button>
+
+              {isSortOpen && (
+                <div 
+                  className="glass animate-fade-in"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    zIndex: 100,
+                    minWidth: '220px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-light)',
+                    padding: '6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5), 0 8px 10px -6px rgba(0,0,0,0.5)',
+                    backdropFilter: 'blur(16px)',
+                    background: 'rgba(15, 23, 42, 0.95)'
+                  }}
+                >
+                  {sortOptions.map((opt) => {
+                    const isSelected = opt.value === sortBy;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          handleSortChange(opt.value);
+                          setIsSortOpen(false);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          width: '100%',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: isSelected ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                          color: isSelected ? 'var(--primary)' : 'var(--text-primary)',
+                          fontSize: '0.85rem',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          fontWeight: isSelected ? 600 : 400
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) {
+                            e.currentTarget.style.background = 'transparent';
+                          }
+                        }}
+                      >
+                        <span>{opt.icon}</span>
+                        <span style={{ flex: 1 }}>{opt.label}</span>
+                        {isSelected && <span style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

@@ -95,14 +95,22 @@ export function DeckManageScreen({
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generatedCards, setGeneratedCards] = useState<{ front: string; back: string; selected: boolean }[]>([]);
 
+  const [visibleCount, setVisibleCount] = useState(20);
+
+  const [prevDeckId, setPrevDeckId] = useState(deck.id);
+  if (deck.id !== prevDeckId) {
+    setPrevDeckId(deck.id);
+    setVisibleCount(20);
+  }
+
   // Subscribe to deck's cards
   useEffect(() => {
     const unsubscribe = subscribeToCards(deck.id, (loadedCards) => {
       setCards(loadedCards);
       setLoadingCards(false);
-    });
+    }, visibleCount);
     return unsubscribe;
-  }, [deck.id, subscribeToCards]);
+  }, [deck.id, subscribeToCards, visibleCount]);
 
 
   // Helper to safely parse Firebase/local Timestamps or Javascript Dates
@@ -869,7 +877,7 @@ Goodbye;Do widzenia
 
           {/* Cards List Section */}
           <div className="section-title">
-            <h2>Deck Contents ({cards.length} {cards.length === 1 ? 'card' : 'cards'})</h2>
+            <h2>Deck Contents ({deck.cardCount} {deck.cardCount === 1 ? 'card' : 'cards'})</h2>
           </div>
 
           {loadingCards ? (
@@ -903,6 +911,17 @@ Goodbye;Do widzenia
                   </button>
                 </div>
               ))}
+
+              {cards.length < deck.cardCount && (
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  onClick={() => setVisibleCount(prev => prev + 20)}
+                >
+                  Load More ({cards.length} of {deck.cardCount})
+                </button>
+              )}
             </div>
           )}
 
