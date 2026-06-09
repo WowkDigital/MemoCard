@@ -10,7 +10,11 @@ import {
   Award, 
   Clock, 
   TrendingUp,
-  Database
+  Database,
+  Sparkles,
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
@@ -67,12 +71,29 @@ export function DeckManageScreen({
   const [isAdding, setIsAdding] = useState(false);
   const [showConfirmDeleteDeck, setShowConfirmDeleteDeck] = useState(false);
 
+  // Mode dodawania pytań: manualny, import JSON, generowanie AI
+  const [addMode, setAddMode] = useState<'manual' | 'import' | 'ai'>('manual');
+
   // JSON import states
-  const [showImportMode, setShowImportMode] = useState(false);
   const [importJSON, setImportJSON] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Stany dla Google AI
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('google_ai_api_key') || '');
+  const [tempApiKey, setTempApiKey] = useState(localStorage.getItem('google_ai_api_key') || '');
+  const [showKeyField, setShowKeyField] = useState(!localStorage.getItem('google_ai_api_key'));
+  const [showKeyText, setShowKeyText] = useState(false);
+  
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiSourceText, setAiSourceText] = useState('');
+  const [aiCardCount, setAiCardCount] = useState(10);
+  const [aiLanguage, setAiLanguage] = useState('polski');
+  
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generatedCards, setGeneratedCards] = useState<{ front: string; back: string; selected: boolean }[]>([]);
 
   // Subscribe to deck's cards
   useEffect(() => {
@@ -90,10 +111,12 @@ export function DeckManageScreen({
     if (typeof card.nextReview.toDate === 'function') {
       return card.nextReview.toDate();
     }
-    const nr = card.nextReview as any;
+    const nr = card.nextReview as unknown as { seconds?: number } | Date;
     if (nr instanceof Date) return nr;
-    if (nr.seconds !== undefined) return new Date(nr.seconds * 1000);
-    return new Date(nr);
+    if (nr && typeof nr === 'object' && 'seconds' in nr && typeof nr.seconds === 'number') {
+      return new Date(nr.seconds * 1000);
+    }
+    return new Date(nr as unknown as string);
   };
 
   // Calculate statistics
@@ -219,13 +242,154 @@ export function DeckManageScreen({
       await importCards(deck.id, parsed.cards, (progress) => {
         setImportProgress({ current: progress, total: parsed.cards.length });
       });
-      showToast(`${parsed.cards.length} cards imported!`, 'success');
+      showToast(`Zaimportowano ${parsed.cards.length} pytań!`, 'success');
       setImportJSON('');
-      setShowImportMode(false);
-    } catch (err: any) {
+      setAddMode('manual');
+    } catch (err) {
+      const error = err as Error;
+      console.error(error);
+      setImportError(error.message || 'Niepoprawny format danych.');
+      showToast('Import nie powiódł się.', 'error');
+    } finally {
+      setIsImporting(false);
+      setImportProgress(null);
+    }
+  };
+
+  const handleSaveApiKey = (key: string) => {
+    const trimmed = key.trim();
+    setApiKey(trimmed);
+    setTempApiKey(trimmed);
+    localStorage.setItem('google_ai_api_key', trimmed);
+  };
+
+  const handleGenerateAICards = async () => {
+    if (!apiKey) {
+      showToast('Wprowadź klucz API Google AI, aby kontynuować.', 'error');
+      return;
+    }
+    if (!aiPrompt.trim() && !aiSourceText.trim()) {
+      showToast('Wprowadź temat lub tekst źródłowy.', 'error');
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationError(null);
+    setGeneratedCards([]);
+
+    const userPrompt = `Generate ${aiCardCount} flashcards for learning. 
+Target Language for cards (both front and back): ${aiLanguage}
+Topic/Prompt: ${aiPrompt}
+${aiSourceText ? `Use the following source text as the sole basis for the flashcards:\n${aiSourceText}` : ''}
+Generate clear, educational questions/terms/phrases on the front and accurate, concise answers/translations/explanations on the back.`;
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            {
+              text: userPrompt
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            cards: {
+              type: "ARRAY",
+              description: "List of generated flashcards",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  front: { type: "STRING", description: "Question, term, or prompt on the front side of the flashcard." },
+                  back: { type: "STRING", description: "Answer, translation, or definition on the back side of the flashcard." }
+                },
+                required: ["front", "back"]
+              }
+            }
+          },
+          required: ["cards"]
+        }
+      }
+    };
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!textContent) {
+        throw new Error('Otrzymano pustą odpowiedź od Google AI.');
+      }
+
+      const parsed = JSON.parse(textContent);
+      if (!parsed.cards || !Array.isArray(parsed.cards)) {
+        throw new Error('Odpowiedź nie zawiera poprawnej tablicy kart.');
+      }
+
+      interface AICard {
+        front?: string;
+        back?: string;
+      }
+
+      const formattedCards = (parsed.cards as AICard[]).map((c) => ({
+        front: String(c.front || '').trim(),
+        back: String(c.back || '').trim(),
+        selected: true,
+      })).filter((c) => c.front && c.back);
+
+      if (formattedCards.length === 0) {
+        throw new Error('Google AI nie wygenerowało żadnych poprawnych kart.');
+      }
+
+      setGeneratedCards(formattedCards);
+      showToast(`Wygenerowano ${formattedCards.length} kart!`, 'success');
+    } catch (err) {
+      const error = err as Error;
+      console.error("AI Generation Error:", error);
+      setGenerationError(error.message || 'Wystąpił nieznany błąd podczas generowania.');
+      showToast('Generowanie nie powiodło się.', 'error');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSaveGeneratedCards = async () => {
+    const selected = generatedCards.filter(c => c.selected && c.front.trim() && c.back.trim());
+    if (selected.length === 0) return;
+
+    setIsImporting(true);
+    setImportProgress({ current: 0, total: selected.length });
+    try {
+      await importCards(deck.id, selected.map(c => ({ front: c.front.trim(), back: c.back.trim() })), (progress) => {
+        setImportProgress({ current: progress, total: selected.length });
+      });
+      showToast(`Dodano ${selected.length} kart!`, 'success');
+      setGeneratedCards([]);
+      setAiPrompt('');
+      setAiSourceText('');
+      setAddMode('manual');
+    } catch (err) {
       console.error(err);
-      setImportError(err.message || 'Invalid data format.');
-      showToast('Import failed.', 'error');
+      showToast('Nie udało się zapisać wygenerowanych kart.', 'error');
     } finally {
       setIsImporting(false);
       setImportProgress(null);
@@ -277,31 +441,61 @@ export function DeckManageScreen({
         <>
           {/* Add Card Form */}
           <div className="glass" style={{ padding: '20px', marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.1rem' }}>
-                {showImportMode ? 'Import flashcards from JSON' : 'Add new flashcard'}
-              </h3>
+            {/* Tryb wyboru dodawania */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--border-light)', paddingBottom: '16px' }}>
               <button 
-                className="btn btn-secondary" 
-                style={{ width: 'auto', padding: '4px 12px', fontSize: '0.8rem' }}
+                type="button"
+                className={`btn ${addMode === 'manual' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem', height: '38px' }}
                 onClick={() => {
-                  setShowImportMode(!showImportMode);
+                  setAddMode('manual');
                   setImportError(null);
+                  setGenerationError(null);
                 }}
               >
-                {showImportMode ? 'Manual Entry' : 'Import from JSON'}
+                <Plus size={14} />
+                <span>Ręcznie</span>
+              </button>
+              <button 
+                type="button"
+                className={`btn ${addMode === 'import' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem', height: '38px' }}
+                onClick={() => {
+                  setAddMode('import');
+                  setImportError(null);
+                  setGenerationError(null);
+                }}
+              >
+                <Database size={14} />
+                <span>Import JSON/CSV</span>
+              </button>
+              <button 
+                type="button"
+                className={`btn ${addMode === 'ai' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1, padding: '8px 12px', fontSize: '0.8rem', height: '38px' }}
+                onClick={() => {
+                  setAddMode('ai');
+                  setImportError(null);
+                  setGenerationError(null);
+                }}
+              >
+                <Sparkles size={14} />
+                <span>Generuj przez AI</span>
               </button>
             </div>
 
-            {!showImportMode ? (
+            {addMode === 'manual' && (
               <form onSubmit={handleAddCardSubmit}>
+                <div style={{ marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.05rem' }}>Dodaj nową fiszkę</h3>
+                </div>
                 <div className="form-row-grid">
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Front</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Front (awers)</label>
                     <input 
                       type="text" 
                       className="form-input" 
-                      placeholder="e.g. Hello" 
+                      placeholder="np. Hello" 
                       value={front}
                       onChange={(e) => setFront(e.target.value)}
                       required
@@ -309,11 +503,11 @@ export function DeckManageScreen({
                     />
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Back</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Back (rewers)</label>
                     <input 
                       type="text" 
                       className="form-input" 
-                      placeholder="e.g. Cześć" 
+                      placeholder="np. Cześć" 
                       value={back}
                       onChange={(e) => setBack(e.target.value)}
                       required
@@ -324,21 +518,26 @@ export function DeckManageScreen({
                 <button 
                   type="submit" 
                   className="btn btn-primary" 
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '16px' }}
                   disabled={isAdding}
                 >
                   <Plus size={16} />
-                  {isAdding ? 'Adding...' : 'Add Flashcard'}
+                  {isAdding ? 'Dodawanie...' : 'Dodaj fiszkę'}
                 </button>
               </form>
-            ) : (
+            )}
+
+            {addMode === 'import' && (
               <form onSubmit={handleImportSubmit}>
+                <div style={{ marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.05rem' }}>Importuj z formatu tekstowego</h3>
+                </div>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.8rem' }}>Paste data (JSON, CSV, Excel)</label>
+                  <label className="form-label" style={{ fontSize: '0.8rem' }}>Wklej dane (JSON, CSV, Excel)</label>
                   <textarea 
                     className="form-input" 
                     style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
-                    placeholder="Paste JSON array, CSV data (separated by ;) or copied columns from Excel..."
+                    placeholder="Wklej tablicę JSON, CSV (oddzielone średnikami) lub kolumny skopiowane z Excela..."
                     value={importJSON}
                     onChange={(e) => setImportJSON(e.target.value)}
                     required
@@ -352,13 +551,13 @@ export function DeckManageScreen({
                 )}
 
                 <div style={{ marginBottom: '16px' }}>
-                  <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Examples of efficient formats (metadata headers will be ignored since deck exists):</span>
+                  <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Przykład formatów:</span>
                   <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-{`// 1. Plain text / Excel / CSV (Recommended — fastest)
+{`// 1. Zwykły tekst / Excel / CSV (Zalecany)
 Hello;Cześć
 Goodbye;Do widzenia
 
-// 2. Compact JSON (without repeating keys)
+// 2. Format JSON
 [
   ["Hello", "Cześć"],
   ["Goodbye", "Do widzenia"]
@@ -372,11 +571,301 @@ Goodbye;Do widzenia
                   style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                   disabled={isImporting}
                 >
-                  {isImporting ? 'Importing...' : 'Start Import'}
+                  {isImporting ? 'Importowanie...' : 'Uruchom import'}
                 </button>
               </form>
             )}
+
+            {addMode === 'ai' && (
+              <div>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={16} style={{ color: 'var(--primary)' }} />
+                    Generuj fiszki przy użyciu Google AI (Gemini)
+                  </h3>
+                </div>
+
+                {/* API Key management */}
+                {!showKeyField && apiKey ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    background: 'rgba(255, 255, 255, 0.03)', 
+                    padding: '10px 14px', 
+                    borderRadius: '10px', 
+                    border: '1px solid var(--border-light)',
+                    marginBottom: '16px' 
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Key size={16} style={{ color: 'var(--primary)' }} />
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        Klucz Google AI: <code style={{ color: 'var(--text-primary)' }}>••••••••{apiKey.slice(-6)}</code>
+                      </span>
+                    </div>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      style={{ width: 'auto', padding: '4px 10px', fontSize: '0.75rem', height: 'auto' }}
+                      onClick={() => setShowKeyField(true)}
+                    >
+                      Zmień
+                    </button>
+                  </div>
+                ) : (
+                  <div className="glass" style={{ padding: '16px', marginBottom: '16px', border: '1px solid rgba(99, 102, 241, 0.3)', background: 'rgba(99, 102, 241, 0.02)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Key size={14} style={{ color: 'var(--primary)' }} />
+                        Wprowadź swój Google AI API Key
+                      </label>
+                      <a 
+                        href="https://aistudio.google.com/" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        style={{ fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'underline' }}
+                      >
+                        Pobierz darmowy klucz AI
+                      </a>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <input 
+                          type={showKeyText ? "text" : "password"} 
+                          className="form-input" 
+                          placeholder="AIzaSy..." 
+                          value={tempApiKey}
+                          onChange={(e) => setTempApiKey(e.target.value)}
+                          style={{ paddingRight: '40px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowKeyText(!showKeyText)}
+                          style={{
+                            position: 'absolute',
+                            right: '10px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          {showKeyText ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <button 
+                        type="button" 
+                        className="btn btn-primary" 
+                        style={{ width: 'auto', padding: '0 16px', height: '42px' }}
+                        onClick={() => {
+                          if (tempApiKey.trim()) {
+                            handleSaveApiKey(tempApiKey);
+                            setShowKeyField(false);
+                            showToast('Klucz API został zapisany!', 'success');
+                          } else {
+                            showToast('Wprowadź poprawny klucz API.', 'error');
+                          }
+                        }}
+                      >
+                        Zapisz
+                      </button>
+                    </div>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '6px', margin: '6px 0 0 0' }}>
+                      Twój klucz jest zapisywany lokalnie w przeglądarce i wysyłany bezpośrednio do Google AI.
+                    </p>
+                  </div>
+                )}
+
+                {/* Prompt parameters */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '0.85rem' }}>Temat lub zagadnienie do wygenerowania</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="np. Podstawy języka włoskiego, stolice Europy, podstawy JavaScript" 
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Tekst źródłowy (opcjonalnie)</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stwórz pytania na podstawie tekstu</span>
+                  </label>
+                  <textarea 
+                    className="form-input" 
+                    placeholder="Wklej tutaj notatki, artykuł lub dokumentację, a AI wygeneruje pytania bezpośrednio z wklejonej treści..." 
+                    value={aiSourceText}
+                    onChange={(e) => setAiSourceText(e.target.value)}
+                    style={{ minHeight: '100px', resize: 'vertical', fontSize: '0.85rem' }}
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Liczba pytań</label>
+                    <input 
+                      type="number" 
+                      className="form-input" 
+                      value={aiCardCount}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setAiCardCount(isNaN(val) ? 10 : Math.max(1, Math.min(100, val)));
+                      }}
+                      min={1}
+                      max={100}
+                      disabled={isGenerating}
+                    />
+                  </div>
+                  
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Język fiszek</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={aiLanguage}
+                      onChange={(e) => setAiLanguage(e.target.value)}
+                      placeholder="np. polski, angielski"
+                      disabled={isGenerating}
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                  disabled={isGenerating || !apiKey || (!aiPrompt.trim() && !aiSourceText.trim())}
+                  onClick={handleGenerateAICards}
+                >
+                  {isGenerating ? (
+                    <>
+                      <div className="loading-spinner" style={{ width: '16px', height: '16px', borderTopColor: '#fff', margin: 0 }}></div>
+                      Generowanie przez AI...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      Generuj pytania
+                    </>
+                  )}
+                </button>
+
+                {generationError && (
+                  <div style={{ 
+                    color: 'var(--color-again)', 
+                    fontSize: '0.85rem', 
+                    marginTop: '12px', 
+                    display: 'flex', 
+                    alignItems: 'flex-start', 
+                    gap: '6px',
+                    background: 'var(--color-again-glow)',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(239, 68, 68, 0.2)' 
+                  }}>
+                    <span>⚠️ Błąd: {generationError}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* AI generated preview section */}
+          {addMode === 'ai' && generatedCards.length > 0 && (
+            <div className="glass" style={{ padding: '20px', marginBottom: '24px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+              <h3 style={{ margin: '0 0 16px 0', fontWeight: 600, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={18} style={{ color: 'var(--color-easy)' }} />
+                Podgląd wygenerowanych pytań ({generatedCards.length})
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '16px' }}>
+                Przejrzyj, edytuj i odznacz pytania, których nie chcesz dodawać.
+              </p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '400px', overflowY: 'auto', paddingRight: '4px', marginBottom: '20px' }}>
+                {generatedCards.map((card, idx) => (
+                  <div key={idx} style={{ 
+                    display: 'flex', 
+                    gap: '12px', 
+                    alignItems: 'flex-start', 
+                    background: 'rgba(0, 0, 0, 0.15)', 
+                    padding: '12px', 
+                    borderRadius: '10px',
+                    border: card.selected ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid var(--border-light)',
+                    opacity: card.selected ? 1 : 0.6
+                  }}>
+                    <input 
+                      type="checkbox" 
+                      checked={card.selected}
+                      onChange={() => {
+                        const copy = [...generatedCards];
+                        copy[idx].selected = !copy[idx].selected;
+                        setGeneratedCards(copy);
+                      }}
+                      style={{ marginTop: '12px', cursor: 'pointer', width: '16px', height: '16px' }}
+                    />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>FRONT (PYTANIE / SŁOWO)</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ fontSize: '0.85rem', padding: '6px 10px' }}
+                          value={card.front}
+                          onChange={(e) => {
+                            const copy = [...generatedCards];
+                            copy[idx].front = e.target.value;
+                            setGeneratedCards(copy);
+                          }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>BACK (ODPOWIEDŹ / TLUMACZENIE)</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          style={{ fontSize: '0.85rem', padding: '6px 10px' }}
+                          value={card.back}
+                          onChange={(e) => {
+                            const copy = [...generatedCards];
+                            copy[idx].back = e.target.value;
+                            setGeneratedCards(copy);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ flex: 1 }}
+                  onClick={() => setGeneratedCards([])}
+                >
+                  Odrzuć
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ flex: 2 }}
+                  disabled={isImporting || generatedCards.filter(c => c.selected).length === 0}
+                  onClick={handleSaveGeneratedCards}
+                >
+                  {isImporting ? 'Zapisywanie...' : `Dodaj wybrane pytania (${generatedCards.filter(c => c.selected).length})`}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Cards List Section */}
           <div className="section-title">
