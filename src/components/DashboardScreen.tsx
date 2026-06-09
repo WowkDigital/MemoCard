@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon, SlidersHorizontal, Database, Sparkles } from 'lucide-react';
+import { Plus, LogOut, BookOpen, Settings, Layers, RefreshCw, User as UserIcon, SlidersHorizontal, Database, Sparkles } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
@@ -12,6 +12,7 @@ interface DashboardScreenProps {
   onSelectDeck: (deck: Deck) => void;
   onStartReview: (deck: Deck) => void;
   onNavigateToAddDeck: () => void;
+  onNavigateToSettings: () => void;
   showToast: (message: string, type: 'success' | 'error') => void;
 }
 
@@ -21,6 +22,7 @@ export function DashboardScreen({
   onSelectDeck,
   onStartReview,
   onNavigateToAddDeck,
+  onNavigateToSettings,
   showToast
 }: DashboardScreenProps) {
   const { decks, loadingDecks, cloneSharedDeck, getCardsOnce, getDueCount, healDeckStats } = useFirestore(user.uid);
@@ -200,32 +202,7 @@ export function DashboardScreen({
     return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  // API key state (synced with localStorage)
-  const [googleApiKey, setGoogleApiKey] = useState(() => localStorage.getItem('google_ai_api_key') || '');
-
-  // App settings states
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-
-  // Sync key when modal opens
-  useEffect(() => {
-    if (showSettingsModal) {
-      setGoogleApiKey(localStorage.getItem('google_ai_api_key') || '');
-    }
-  }, [showSettingsModal]);
-  
-  const [questionFontSize, setQuestionFontSize] = useState<number>(() => {
-    const val = localStorage.getItem('memocard_question_font_size');
-    return val ? parseInt(val, 10) : 28;
-  });
-  const [answerFontSize, setAnswerFontSize] = useState<number>(() => {
-    const val = localStorage.getItem('memocard_answer_font_size');
-    return val ? parseInt(val, 10) : 28;
-  });
-  const [previewSide, setPreviewSide] = useState<'front' | 'back'>('front');
-  const [showStudyDetails, setShowStudyDetails] = useState<boolean>(() => {
-    return localStorage.getItem('memocard_show_study_details') === 'true';
-  });
-
+  // Sync settings when needed is no longer handled in DashboardScreen.
   const [isCloning, setIsCloning] = useState(false);
   const [cloneProgress, setCloneProgress] = useState<{ current: number; total: number } | null>(null);
 
@@ -409,7 +386,7 @@ export function DashboardScreen({
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button 
             className="settings-btn" 
-            onClick={() => setShowSettingsModal(true)} 
+            onClick={onNavigateToSettings} 
             title="Ustawienia aplikacji"
           >
             <Settings size={18} />
@@ -904,209 +881,6 @@ export function DashboardScreen({
                 </span>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* App Settings Modal */}
-      {showSettingsModal && (
-        <div className="modal-overlay" onClick={() => setShowSettingsModal(false)}>
-          <div className="modal-content glass animate-fade-in" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Settings size={20} style={{ color: 'var(--primary)' }} />
-                Application Settings
-              </h3>
-              <button className="close-btn" onClick={() => setShowSettingsModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Question Font Size Slider */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>Question font size</label>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{questionFontSize}px</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="16" 
-                  max="48" 
-                  value={questionFontSize} 
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10);
-                    setQuestionFontSize(val);
-                    localStorage.setItem('memocard_question_font_size', String(val));
-                  }}
-                  style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer' }}
-                />
-              </div>
-
-              {/* Answer Font Size Slider */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>Answer font size</label>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{answerFontSize}px</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="16" 
-                  max="48" 
-                  value={answerFontSize} 
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10);
-                    setAnswerFontSize(val);
-                    localStorage.setItem('memocard_answer_font_size', String(val));
-                  }}
-                  style={{ width: '100%', accentColor: 'var(--primary)', cursor: 'pointer' }}
-                />
-              </div>
-
-              {/* Show Study Details Toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                <div style={{ paddingRight: '16px' }}>
-                  <label className="form-label" style={{ marginBottom: '2px', cursor: 'pointer', display: 'block' }}>Show SRS details on buttons</label>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8, margin: 0, lineHeight: '1.3' }}>Displays time to next review and change in ease factor (SM-2).</p>
-                </div>
-                <input 
-                  type="checkbox" 
-                  checked={showStudyDetails} 
-                  onChange={(e) => {
-                    const val = e.target.checked;
-                    setShowStudyDetails(val);
-                    localStorage.setItem('memocard_show_study_details', String(val));
-                  }}
-                  style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer', flexShrink: 0 }}
-                />
-              </div>
-
-              {/* Google AI API Key Input */}
-              <div className="form-group" style={{ marginBottom: 0, borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
-                <label className="form-label" style={{ marginBottom: '6px' }}>Google AI API Key</label>
-                <input 
-                  type="password" 
-                  value={googleApiKey}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setGoogleApiKey(val);
-                    localStorage.setItem('google_ai_api_key', val.trim());
-                  }}
-                  placeholder="AIzaSy..."
-                  className="form-control"
-                  style={{ width: '100%' }}
-                />
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', opacity: 0.7, marginTop: '4px', marginBottom: 0 }}>
-                  Used for deck generation with Gemini AI models.
-                </p>
-              </div>
-
-              {/* Visualization of the card */}
-              <div style={{ marginTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
-                <span className="form-label" style={{ marginBottom: '10px' }}>Card preview</span>
-                
-                {/* Tabs to select Front / Back preview */}
-                <div style={{
-                  display: 'flex',
-                  background: 'rgba(0, 0, 0, 0.2)',
-                  borderRadius: '10px',
-                  padding: '3px',
-                  marginBottom: '12px'
-                }}>
-                  <button 
-                    type="button"
-                    onClick={() => setPreviewSide('front')}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: previewSide === 'front' ? 'var(--primary)' : 'transparent',
-                      color: previewSide === 'front' ? 'white' : 'var(--text-secondary)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    Question (Front)
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setPreviewSide('back')}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: previewSide === 'back' ? 'var(--primary)' : 'transparent',
-                      color: previewSide === 'back' ? 'white' : 'var(--text-secondary)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    Answer (Back)
-                  </button>
-                </div>
-
-                {/* Card Container Preview */}
-                <div 
-                  className={`flashcard-container ${previewSide === 'back' ? 'is-flipped' : ''}`}
-                  style={{ 
-                    height: 'auto', 
-                    minHeight: '200px', 
-                    marginBottom: 0, 
-                    pointerEvents: 'none'
-                  }}
-                >
-                  <div className="flashcard-inner" style={{ height: 'auto', minHeight: 'inherit' }}>
-                    {previewSide === 'front' ? (
-                      /* Front preview */
-                      <div className="flashcard-face flashcard-front" style={{ minHeight: '200px', height: 'auto', padding: '20px' }}>
-                        <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>
-                          What is the capital of France?
-                        </span>
-                      </div>
-                    ) : (
-                      /* Back preview */
-                      <div className="flashcard-face flashcard-back" style={{ minHeight: '200px', height: 'auto', padding: '20px', paddingTop: '45px' }}>
-                        <div style={{
-                          position: 'absolute',
-                          top: '12px',
-                          left: '12px',
-                          right: '12px',
-                          fontSize: '0.75rem',
-                          color: 'var(--text-secondary)',
-                          opacity: 0.7,
-                          textAlign: 'center',
-                          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                          paddingBottom: '4px',
-                          fontStyle: 'italic'
-                        }}>
-                          What is the capital of France?
-                        </div>
-                        <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>
-                          Paris (Paris) - it is the largest city and the capital of France, located on the Seine river.
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-actions" style={{ marginTop: '10px' }}>
-                <button 
-                  type="button" 
-                  className="btn btn-primary" 
-                  style={{ width: '100%' }}
-                  onClick={() => setShowSettingsModal(false)}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

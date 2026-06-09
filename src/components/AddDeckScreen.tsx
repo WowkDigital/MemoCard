@@ -36,6 +36,11 @@ export function AddDeckScreen({ user, onBack, showToast }: AddDeckScreenProps) {
   const [aiSourceText, setAiSourceText] = useState('');
   const [aiLanguage, setAiLanguage] = useState('English');
   const [aiModel, setAiModel] = useState(() => localStorage.getItem('google_ai_model') || 'gemini-2.5-flash');
+  const [isCustomModel, setIsCustomModel] = useState(() => {
+    const saved = localStorage.getItem('google_ai_model');
+    if (!saved) return false;
+    return !['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-pro-exp-02-05', 'gemini-1.5-flash', 'gemini-1.5-pro'].includes(saved);
+  });
   const [aiCardCount, setAiCardCount] = useState<number | ''>(10);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -617,21 +622,51 @@ Gracias;Thank you`}
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">AI Model</label>
-                        <select 
-                          className="form-input" 
-                          value={aiModel}
-                          onChange={(e) => {
-                            setAiModel(e.target.value);
-                            localStorage.setItem('google_ai_model', e.target.value);
-                          }}
-                          disabled={isGenerating}
-                          style={{ height: '42px', padding: '0 10px', background: 'var(--bg-input, rgba(255,255,255,0.05))', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
-                        >
-                          <option value="gemini-2.5-flash" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 2.5 Flash</option>
-                          <option value="gemini-2.5-pro" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 2.5 Pro</option>
-                        </select>
+                      <div className="form-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div>
+                          <label className="form-label">AI Model</label>
+                          <select 
+                            className="form-input" 
+                            value={isCustomModel ? 'custom' : aiModel}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'custom') {
+                                setIsCustomModel(true);
+                                setAiModel('gemini-2.0-flash-exp');
+                              } else {
+                                setIsCustomModel(false);
+                                setAiModel(val);
+                                localStorage.setItem('google_ai_model', val);
+                              }
+                            }}
+                            disabled={isGenerating}
+                            style={{ height: '42px', padding: '0 10px', background: 'var(--bg-input, rgba(255,255,255,0.05))', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+                          >
+                            <option value="gemini-2.5-flash" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 2.5 Flash</option>
+                            <option value="gemini-2.5-pro" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 2.5 Pro</option>
+                            <option value="gemini-2.0-flash" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 2.0 Flash</option>
+                            <option value="gemini-2.0-pro-exp-02-05" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 2.0 Pro (Exp)</option>
+                            <option value="gemini-1.5-flash" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 1.5 Flash</option>
+                            <option value="gemini-1.5-pro" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 1.5 Pro</option>
+                            <option value="custom" style={{ background: '#1e1e24', color: '#fff' }}>Custom Model...</option>
+                          </select>
+                        </div>
+                        {isCustomModel && (
+                          <div>
+                            <input 
+                              type="text" 
+                              className="form-input" 
+                              placeholder="e.g. gemini-2.0-flash-exp" 
+                              value={aiModel}
+                              onChange={(e) => {
+                                setAiModel(e.target.value);
+                                localStorage.setItem('google_ai_model', e.target.value);
+                              }}
+                              disabled={isGenerating}
+                              style={{ height: '36px', fontSize: '0.8rem' }}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <div className="form-group" style={{ marginBottom: 0 }}>
