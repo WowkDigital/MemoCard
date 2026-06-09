@@ -54,6 +54,8 @@ export function ReviewScreen({
     localStorage.setItem('memocard_show_study_details', String(val));
   };
 
+  const [googleApiKey, setGoogleApiKey] = useState(() => localStorage.getItem('google_ai_api_key') || '');
+
   const calculateSRSResult = (card: Card | undefined, quality: number) => {
     if (!card) return { interval: 0, easeFactor: 2.5, easeDiff: 0 };
     
@@ -97,11 +99,11 @@ export function ReviewScreen({
     const result = calculateSRSResult(card, quality);
     let intervalStr = '';
     if (result.interval === 999999) {
-      intervalStr = 'na zawsze';
+      intervalStr = 'forever';
     } else if (result.interval === 1) {
-      intervalStr = 'za 1 d';
+      intervalStr = 'in 1 d';
     } else {
-      intervalStr = `za ${result.interval} d`;
+      intervalStr = `in ${result.interval} d`;
     }
 
     let easeStr = '';
@@ -110,7 +112,7 @@ export function ReviewScreen({
     } else if (result.easeDiff < 0) {
       easeStr = `${result.easeDiff}`;
     } else {
-      easeStr = 'b/z';
+      easeStr = 'no chg';
     }
 
     return (
@@ -529,10 +531,10 @@ export function ReviewScreen({
             transition: 'color 0.2s ease',
             padding: '4px 8px'
           }}
-          title="Powrót do zarządzania talią"
+          title="Back to deck management"
         >
           <LayoutDashboard size={18} />
-          <span style={{ display: 'inline-block' }}>Talia: <strong>{deck.name}</strong></span>
+          <span style={{ display: 'inline-block' }}>Deck: <strong>{deck.name}</strong></span>
         </button>
 
         {/* Right Side: Toolbar cluster (details, forever mode, settings) */}
@@ -554,7 +556,7 @@ export function ReviewScreen({
               color: showStudyDetails ? 'var(--primary)' : 'var(--text-secondary)',
               transition: 'all 0.2s ease',
             }}
-            title={showStudyDetails ? "Ukryj szczegóły powtórek" : "Pokaż szczegóły powtórek"}
+            title={showStudyDetails ? "Hide study details" : "Show study details"}
           >
             {showStudyDetails ? <Eye size={18} /> : <EyeOff size={18} />}
           </button>
@@ -576,7 +578,7 @@ export function ReviewScreen({
               color: foreverMode ? 'var(--color-forever)' : 'var(--text-secondary)',
               transition: 'all 0.2s ease',
             }}
-            title={foreverMode ? "Wyłącz Forever Mode" : "Włącz Forever Mode"}
+            title={foreverMode ? "Disable Forever Mode" : "Enable Forever Mode"}
           >
             <Infinity size={18} />
           </button>
@@ -601,7 +603,7 @@ export function ReviewScreen({
               border: 'none',
               color: 'var(--text-secondary)'
             }}
-            title="Ustawienia nauki"
+            title="Study settings"
           >
             <Settings size={18} />
           </button>
@@ -743,13 +745,14 @@ export function ReviewScreen({
       )}
 
       {/* App Settings Modal in ReviewScreen */}
+      {/* App Settings Modal in ReviewScreen */}
       {showSettingsModal && (
         <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowSettingsModal(false); }}>
           <div className="modal-content glass animate-fade-in" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Settings size={20} style={{ color: 'var(--primary)' }} />
-                Ustawienia nauki
+                Study Settings
               </h3>
               <button className="close-btn" onClick={() => setShowSettingsModal(false)}>
                 <X size={20} />
@@ -760,7 +763,7 @@ export function ReviewScreen({
               {/* Question Font Size Slider */}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>Rozmiar czcionki pytania</label>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Question font size</label>
                   <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{questionFontSize}px</span>
                 </div>
                 <input 
@@ -780,7 +783,7 @@ export function ReviewScreen({
               {/* Answer Font Size Slider */}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>Rozmiar czcionki odpowiedzi</label>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Answer font size</label>
                   <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{answerFontSize}px</span>
                 </div>
                 <input 
@@ -800,8 +803,8 @@ export function ReviewScreen({
               {/* Toggle details directly in settings */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <div style={{ paddingRight: '16px' }}>
-                  <label className="form-label" style={{ marginBottom: '2px', cursor: 'pointer', display: 'block' }}>Pokazuj szczegóły powtórek na przyciskach</label>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8, margin: 0, lineHeight: '1.3' }}>Wyświetla czas do kolejnej powtórki oraz zmianę wskaźnika łatwości (SM-2).</p>
+                  <label className="form-label" style={{ marginBottom: '2px', cursor: 'pointer', display: 'block' }}>Show SRS details on buttons</label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8, margin: 0, lineHeight: '1.3' }}>Displays time to next review and change in ease factor (SM-2).</p>
                 </div>
                 <input 
                   type="checkbox" 
@@ -812,10 +815,10 @@ export function ReviewScreen({
               </div>
 
               {/* Toggle forever mode directly in settings */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(255, 255, 255, 0.08)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
                 <div style={{ paddingRight: '16px' }}>
-                  <label className="form-label" style={{ marginBottom: '2px', cursor: 'pointer', display: 'block' }}>Tryb Forever Mode</label>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8, margin: 0, lineHeight: '1.3' }}>Pozwala na trwałe oznaczenie kart jako zapamiętanych (9999 rok).</p>
+                  <label className="form-label" style={{ marginBottom: '2px', cursor: 'pointer', display: 'block' }}>Forever Mode</label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8, margin: 0, lineHeight: '1.3' }}>Permanently marks cards as fully memorized (year 9999).</p>
                 </div>
                 <input 
                   type="checkbox" 
@@ -825,9 +828,29 @@ export function ReviewScreen({
                 />
               </div>
 
+              {/* Google AI API Key Input */}
+              <div className="form-group" style={{ marginBottom: 0, borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
+                <label className="form-label" style={{ marginBottom: '6px' }}>Google AI API Key</label>
+                <input 
+                  type="password" 
+                  value={googleApiKey}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setGoogleApiKey(val);
+                    localStorage.setItem('google_ai_api_key', val.trim());
+                  }}
+                  placeholder="AIzaSy..."
+                  className="form-control"
+                  style={{ width: '100%' }}
+                />
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', opacity: 0.7, marginTop: '4px', marginBottom: 0 }}>
+                  Used for deck generation with Gemini AI models.
+                </p>
+              </div>
+
               {/* Visualization of the card */}
-              <div style={{ marginTop: '10px' }}>
-                <span className="form-label" style={{ marginBottom: '10px' }}>Podgląd karty</span>
+              <div style={{ marginTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
+                <span className="form-label" style={{ marginBottom: '10px' }}>Card preview</span>
                 
                 {/* Tabs to select Front / Back preview */}
                 <div style={{
@@ -853,7 +876,7 @@ export function ReviewScreen({
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    Pytanie (Awers)
+                    Question (Front)
                   </button>
                   <button 
                     type="button"
@@ -871,7 +894,7 @@ export function ReviewScreen({
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    Odpowiedź (Rewers)
+                    Answer (Back)
                   </button>
                 </div>
 
@@ -890,7 +913,7 @@ export function ReviewScreen({
                       /* Front preview */
                       <div className="flashcard-face flashcard-front" style={{ minHeight: '160px', height: 'auto', padding: '20px' }}>
                         <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>
-                          Jak nazywa się stolica Francji?
+                          What is the capital of France?
                         </span>
                       </div>
                     ) : (
@@ -909,10 +932,10 @@ export function ReviewScreen({
                           paddingBottom: '4px',
                           fontStyle: 'italic'
                         }}>
-                          Jak nazywa się stolica Francji?
+                          What is the capital of France?
                         </div>
                         <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>
-                          Paryż
+                          Paris
                         </span>
                       </div>
                     )}
@@ -927,7 +950,7 @@ export function ReviewScreen({
                   style={{ width: '100%' }}
                   onClick={() => setShowSettingsModal(false)}
                 >
-                  Zamknij
+                  Close
                 </button>
               </div>
             </div>

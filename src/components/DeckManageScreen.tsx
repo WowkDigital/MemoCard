@@ -399,7 +399,7 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
       setAddMode('manual');
     } catch (err) {
       console.error(err);
-      showToast('Nie udało się zapisać wygenerowanych kart.', 'error');
+      showToast('Failed to save generated cards.', 'error');
     } finally {
       setIsImporting(false);
       setImportProgress(null);
@@ -464,7 +464,7 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
                 }}
               >
                 <Plus size={14} />
-                <span>Ręcznie</span>
+                <span>Manual</span>
               </button>
               <button 
                 type="button"
@@ -490,22 +490,22 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
                 }}
               >
                 <Sparkles size={14} />
-                <span>Generuj przez AI</span>
+                <span>Generate with AI</span>
               </button>
             </div>
 
             {addMode === 'manual' && (
               <form onSubmit={handleAddCardSubmit}>
                 <div style={{ marginBottom: '16px' }}>
-                  <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.05rem' }}>Dodaj nową fiszkę</h3>
+                  <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.05rem' }}>Add new flashcard</h3>
                 </div>
                 <div className="form-row-grid">
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Front (awers)</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Front</label>
                     <input 
                       type="text" 
                       className="form-input" 
-                      placeholder="np. Hello" 
+                      placeholder="e.g. Hello" 
                       value={front}
                       onChange={(e) => setFront(e.target.value)}
                       required
@@ -513,11 +513,11 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
                     />
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Back (rewers)</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Back</label>
                     <input 
                       type="text" 
                       className="form-input" 
-                      placeholder="np. Cześć" 
+                      placeholder="e.g. Cześć" 
                       value={back}
                       onChange={(e) => setBack(e.target.value)}
                       required
@@ -532,7 +532,7 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
                   disabled={isAdding}
                 >
                   <Plus size={16} />
-                  {isAdding ? 'Dodawanie...' : 'Dodaj fiszkę'}
+                  {isAdding ? 'Adding...' : 'Add flashcard'}
                 </button>
               </form>
             )}
@@ -540,14 +540,14 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
             {addMode === 'import' && (
               <form onSubmit={handleImportSubmit}>
                 <div style={{ marginBottom: '16px' }}>
-                  <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.05rem' }}>Importuj z formatu tekstowego</h3>
+                  <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.05rem' }}>Import from text format</h3>
                 </div>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.8rem' }}>Wklej dane (JSON, CSV, Excel)</label>
+                  <label className="form-label" style={{ fontSize: '0.8rem' }}>Paste data (JSON, CSV, Excel)</label>
                   <textarea 
                     className="form-input" 
                     style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
-                    placeholder="Wklej tablicę JSON, CSV (oddzielone średnikami) lub kolumny skopiowane z Excela..."
+                    placeholder="Paste JSON array, CSV data (separated by ;) or copied columns from Excel..."
                     value={importJSON}
                     onChange={(e) => setImportJSON(e.target.value)}
                     required
@@ -561,13 +561,13 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
                 )}
 
                 <div style={{ marginBottom: '16px' }}>
-                  <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Przykład formatów:</span>
+                  <span className="form-label" style={{ fontSize: '0.8rem', marginBottom: '4px' }}>Example formats:</span>
                   <pre style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '0.75rem', overflowX: 'auto', color: 'var(--text-secondary)' }}>
-{`// 1. Zwykły tekst / Excel / CSV (Zalecany)
+{`// 1. Plain text / Excel / CSV (Recommended)
 Hello;Cześć
 Goodbye;Do widzenia
 
-// 2. Format JSON
+// 2. JSON Format
 [
   ["Hello", "Cześć"],
   ["Goodbye", "Do widzenia"]
@@ -581,7 +581,7 @@ Goodbye;Do widzenia
                   style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                   disabled={isImporting}
                 >
-                  {isImporting ? 'Importowanie...' : 'Uruchom import'}
+                  {isImporting ? 'Importing...' : 'Start Import'}
                 </button>
               </form>
             )}
@@ -591,7 +591,7 @@ Goodbye;Do widzenia
                 <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 style={{ margin: 0, fontWeight: 600, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Sparkles size={16} style={{ color: 'var(--primary)' }} />
-                    Generuj fiszki przy użyciu Google AI (Gemini)
+                    Generate flashcards using Google AI (Gemini)
                   </h3>
                 </div>
 
@@ -610,7 +610,7 @@ Goodbye;Do widzenia
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Key size={16} style={{ color: 'var(--primary)' }} />
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        Klucz Google AI: <code style={{ color: 'var(--text-primary)' }}>••••••••{apiKey.slice(-6)}</code>
+                        Google AI Key: <code style={{ color: 'var(--text-primary)' }}>••••••••{apiKey.slice(-6)}</code>
                       </span>
                     </div>
                     <button 
@@ -619,7 +619,7 @@ Goodbye;Do widzenia
                       style={{ width: 'auto', padding: '4px 10px', fontSize: '0.75rem', height: 'auto' }}
                       onClick={() => setShowKeyField(true)}
                     >
-                      Zmień
+                      Change
                     </button>
                   </div>
                 ) : (
@@ -627,7 +627,7 @@ Goodbye;Do widzenia
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                       <label className="form-label" style={{ fontSize: '0.8rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Key size={14} style={{ color: 'var(--primary)' }} />
-                        Wprowadź swój Google AI API Key
+                        Enter your Google AI API Key
                       </label>
                       <a 
                         href="https://aistudio.google.com/" 
@@ -635,7 +635,7 @@ Goodbye;Do widzenia
                         rel="noopener noreferrer" 
                         style={{ fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'underline' }}
                       >
-                        Pobierz darmowy klucz AI
+                        Get free AI key
                       </a>
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -675,28 +675,28 @@ Goodbye;Do widzenia
                           if (tempApiKey.trim()) {
                             handleSaveApiKey(tempApiKey);
                             setShowKeyField(false);
-                            showToast('Klucz API został zapisany!', 'success');
+                            showToast('API Key saved!', 'success');
                           } else {
-                            showToast('Wprowadź poprawny klucz API.', 'error');
+                            showToast('Enter a valid API Key.', 'error');
                           }
                         }}
                       >
-                        Zapisz
+                        Save
                       </button>
                     </div>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '6px', margin: '6px 0 0 0' }}>
-                      Twój klucz jest zapisywany lokalnie w przeglądarce i wysyłany bezpośrednio do Google AI.
+                      Your key is saved locally in your browser and sent directly to Google AI.
                     </p>
                   </div>
                 )}
 
                 {/* Prompt parameters */}
                 <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.85rem' }}>Temat lub zagadnienie do wygenerowania</label>
+                  <label className="form-label" style={{ fontSize: '0.85rem' }}>Topic or subject to generate</label>
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="np. Podstawy języka włoskiego, stolice Europy, podstawy JavaScript" 
+                    placeholder="e.g. Italian basics, European capitals, basic JavaScript" 
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
                     disabled={isGenerating}
@@ -705,12 +705,12 @@ Goodbye;Do widzenia
 
                 <div className="form-group">
                   <label className="form-label" style={{ fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Tekst źródłowy (opcjonalnie)</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Stwórz pytania na podstawie tekstu</span>
+                    <span>Source text (optional)</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Generate cards directly from text</span>
                   </label>
                   <textarea 
                     className="form-input" 
-                    placeholder="Wklej tutaj notatki, artykuł lub dokumentację, a AI wygeneruje pytania bezpośrednio z wklejonej treści..." 
+                    placeholder="Paste your notes, article, or documentation here, and the AI will generate questions based on it..." 
                     value={aiSourceText}
                     onChange={(e) => setAiSourceText(e.target.value)}
                     style={{ minHeight: '100px', resize: 'vertical', fontSize: '0.85rem' }}
@@ -720,7 +720,7 @@ Goodbye;Do widzenia
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Model AI</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>AI Model</label>
                     <select 
                       className="form-input" 
                       value={aiModel}
@@ -738,7 +738,7 @@ Goodbye;Do widzenia
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Liczba pytań</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Number of questions</label>
                     <input 
                       type="number" 
                       className="form-input" 
@@ -766,13 +766,13 @@ Goodbye;Do widzenia
                   </div>
                   
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Język fiszek</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Target language</label>
                     <input 
                       type="text" 
                       className="form-input" 
                       value={aiLanguage}
                       onChange={(e) => setAiLanguage(e.target.value)}
-                      placeholder="np. polski, angielski"
+                      placeholder="e.g. English, Polish"
                       disabled={isGenerating}
                     />
                   </div>
@@ -788,12 +788,12 @@ Goodbye;Do widzenia
                   {isGenerating ? (
                     <>
                       <div className="loading-spinner" style={{ width: '16px', height: '16px', borderTopColor: '#fff', margin: 0 }}></div>
-                      Generowanie przez AI...
+                      Generating with AI...
                     </>
                   ) : (
                     <>
                       <Sparkles size={16} />
-                      Generuj pytania
+                      Generate questions
                     </>
                   )}
                 </button>
@@ -811,7 +811,7 @@ Goodbye;Do widzenia
                     borderRadius: '8px',
                     border: '1px solid rgba(239, 68, 68, 0.2)' 
                   }}>
-                    <span>⚠️ Błąd: {generationError}</span>
+                    <span>⚠️ Error: {generationError}</span>
                   </div>
                 )}
               </div>
@@ -823,10 +823,10 @@ Goodbye;Do widzenia
             <div className="glass" style={{ padding: '20px', marginBottom: '24px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
               <h3 style={{ margin: '0 0 16px 0', fontWeight: 600, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Sparkles size={18} style={{ color: 'var(--color-easy)' }} />
-                Podgląd wygenerowanych pytań ({generatedCards.length})
+                Preview generated questions ({generatedCards.length})
               </h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '16px' }}>
-                Przejrzyj, edytuj i odznacz pytania, których nie chcesz dodawać.
+                Review, edit, and uncheck questions that you do not want to add.
               </p>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '400px', overflowY: 'auto', paddingRight: '4px', marginBottom: '20px' }}>
@@ -853,7 +853,7 @@ Goodbye;Do widzenia
                     />
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>FRONT (PYTANIE / SŁOWO)</label>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>FRONT (QUESTION / WORD)</label>
                         <input 
                           type="text" 
                           className="form-input" 
@@ -867,7 +867,7 @@ Goodbye;Do widzenia
                         />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>BACK (ODPOWIEDŹ / TLUMACZENIE)</label>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600 }}>BACK (ANSWER / TRANSLATION)</label>
                         <input 
                           type="text" 
                           className="form-input" 
@@ -892,7 +892,7 @@ Goodbye;Do widzenia
                   style={{ flex: 1 }}
                   onClick={() => setGeneratedCards([])}
                 >
-                  Odrzuć
+                  Discard
                 </button>
                 <button 
                   type="button" 
@@ -901,7 +901,7 @@ Goodbye;Do widzenia
                   disabled={isImporting || generatedCards.filter(c => c.selected).length === 0}
                   onClick={handleSaveGeneratedCards}
                 >
-                  {isImporting ? 'Zapisywanie...' : `Dodaj wybrane pytania (${generatedCards.filter(c => c.selected).length})`}
+                  {isImporting ? 'Saving...' : `Add selected questions (${generatedCards.filter(c => c.selected).length})`}
                 </button>
               </div>
             </div>
@@ -1334,9 +1334,9 @@ Goodbye;Do widzenia
             </div>
             
             <div className="progress-info">
-              <h3 className="progress-title">Importowanie pytań...</h3>
+              <h3 className="progress-title">Importing cards...</h3>
               <p className="progress-subtitle">
-                Zapisuję dane w bazie Firestore. Proszę nie zamykać aplikacji.
+                Saving data to Firestore. Please do not close the application.
               </p>
             </div>
 
@@ -1352,7 +1352,7 @@ Goodbye;Do widzenia
                   ></div>
                 </div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  {importProgress.current} / {importProgress.total} pytań
+                  {importProgress.current} / {importProgress.total} cards
                 </span>
               </div>
             )}
