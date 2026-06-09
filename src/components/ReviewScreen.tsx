@@ -15,7 +15,7 @@ export function ReviewScreen({
   deck,
   onBack
 }: ReviewScreenProps) {
-  const { scoreCard, getDueCards } = useFirestore(user.uid);
+  const { scoreCard, getDueCards, getCardsOnce } = useFirestore(user.uid);
   const [loading, setLoading] = useState(true);
   
   // Session queue for review cards
@@ -23,6 +23,7 @@ export function ReviewScreen({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+  const [resetCount, setResetCount] = useState(0);
   const [foreverMode, setForeverMode] = useState<boolean>(() => {
     return localStorage.getItem('memocard_forever_mode') === 'true';
   });
@@ -402,13 +403,19 @@ export function ReviewScreen({
 
     const loadReviewCards = async () => {
       try {
-        const loadedCards = await getDueCards(deck.id);
+        let loadedCards = await getDueCards(deck.id);
+        
+        // If there are no due cards, or if the user is studying again, load all cards from the deck
+        if (loadedCards.length === 0) {
+          loadedCards = await getCardsOnce(deck.id);
+        }
+
         if (!isMounted) return;
 
-        // Shuffle due cards
-        const shuffledDue = [...loadedCards].sort(() => Math.random() - 0.5);
+        // Shuffle cards
+        const shuffled = [...loadedCards].sort(() => Math.random() - 0.5);
 
-        setSessionQueue(shuffledDue);
+        setSessionQueue(shuffled);
         setLoading(false);
       } catch (err) {
         console.error("Error loading cards for review:", err);
@@ -421,7 +428,7 @@ export function ReviewScreen({
     return () => {
       isMounted = false;
     };
-  }, [deck.id, getDueCards]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deck.id, getDueCards, getCardsOnce, resetCount]);
 
   const handleScore = async (quality: number) => {
     console.log("handleScore called. Card:", currentCard?.front, "Quality:", quality);
@@ -441,8 +448,8 @@ export function ReviewScreen({
       console.log("scoreCard returned for:", currentCard.id);
 
       // Update queue/completed count immediately
-      if (quality < 4) {
-        // If wrong or hard answer, put the card at the end of the current session queue
+      if (quality === 1) {
+        // If "Again" (forgotten), put the card at the end of the current session queue
         setSessionQueue(prev => [...prev, currentCard]);
       } else {
         setCompletedCount(prev => prev + 1);
@@ -469,6 +476,7 @@ export function ReviewScreen({
     setIsFlipped(false);
     setDisplayedFront('');
     setDisplayedBack('');
+    setResetCount(prev => prev + 1);
   };
 
   if (loading) {
@@ -646,33 +654,35 @@ export function ReviewScreen({
             onClick={handleCardClick}
           >
             <div className="flashcard-inner">
-              {/* Front Face */}
-              <div className="flashcard-face flashcard-front">
-                <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>{frontToShow}</span>
-              </div>
-              
-              {/* Back Face */}
-              <div className="flashcard-face flashcard-back" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', paddingTop: '52px' }}>
-                <div style={{
-                  position: 'absolute',
-                  top: '20px',
-                  left: '20px',
-                  right: '20px',
-                  fontSize: '0.85rem',
-                  color: 'var(--text-secondary)',
-                  opacity: 0.7,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  textAlign: 'center',
-                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                  paddingBottom: '8px',
-                  fontStyle: 'italic'
-                }}>
-                  {frontToShow}
+              {!isFlipped ? (
+                /* Front Face */
+                <div className="flashcard-face flashcard-front">
+                  <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>{frontToShow}</span>
                 </div>
-                <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>{backToShow}</span>
-              </div>
+              ) : (
+                /* Back Face */
+                <div className="flashcard-face flashcard-back" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingTop: '52px' }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: '20px',
+                    left: '20px',
+                    right: '20px',
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)',
+                    opacity: 0.7,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    textAlign: 'center',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    paddingBottom: '8px',
+                    fontStyle: 'italic'
+                  }}>
+                    {frontToShow}
+                  </div>
+                  <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>{backToShow}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -876,34 +886,36 @@ export function ReviewScreen({
                   }}
                 >
                   <div className="flashcard-inner" style={{ height: 'auto', minHeight: 'inherit' }}>
-                    {/* Front preview */}
-                    <div className="flashcard-face flashcard-front" style={{ minHeight: '160px', height: 'auto', padding: '20px' }}>
-                      <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>
-                        Jak nazywa się stolica Francji?
-                      </span>
-                    </div>
-
-                    {/* Back preview */}
-                    <div className="flashcard-face flashcard-back" style={{ minHeight: '160px', height: 'auto', padding: '20px', paddingTop: '45px' }}>
-                      <div style={{
-                        position: 'absolute',
-                        top: '12px',
-                        left: '12px',
-                        right: '12px',
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)',
-                        opacity: 0.7,
-                        textAlign: 'center',
-                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                        paddingBottom: '4px',
-                        fontStyle: 'italic'
-                      }}>
-                        Jak nazywa się stolica Francji?
+                    {previewSide === 'front' ? (
+                      /* Front preview */
+                      <div className="flashcard-face flashcard-front" style={{ minHeight: '160px', height: 'auto', padding: '20px' }}>
+                        <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>
+                          Jak nazywa się stolica Francji?
+                        </span>
                       </div>
-                      <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>
-                        Paryż
-                      </span>
-                    </div>
+                    ) : (
+                      /* Back preview */
+                      <div className="flashcard-face flashcard-back" style={{ minHeight: '160px', height: 'auto', padding: '20px', paddingTop: '45px' }}>
+                        <div style={{
+                          position: 'absolute',
+                          top: '12px',
+                          left: '12px',
+                          right: '12px',
+                          fontSize: '0.75rem',
+                          color: 'var(--text-secondary)',
+                          opacity: 0.7,
+                          textAlign: 'center',
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                          paddingBottom: '4px',
+                          fontStyle: 'italic'
+                        }}>
+                          Jak nazywa się stolica Francji?
+                        </div>
+                        <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>
+                          Paryż
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

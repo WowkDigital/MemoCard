@@ -88,8 +88,9 @@ export function DeckManageScreen({
   
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiSourceText, setAiSourceText] = useState('');
-  const [aiCardCount, setAiCardCount] = useState(10);
+  const [aiCardCount, setAiCardCount] = useState<number | ''>(10);
   const [aiLanguage, setAiLanguage] = useState('polski');
+  const [aiModel, setAiModel] = useState(() => localStorage.getItem('google_ai_model') || 'gemini-2.5-flash');
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -285,7 +286,8 @@ export function DeckManageScreen({
     setGenerationError(null);
     setGeneratedCards([]);
 
-    const userPrompt = `Generate ${aiCardCount} flashcards for learning. 
+    const cardCount = typeof aiCardCount === 'number' ? Math.max(1, Math.min(100, aiCardCount)) : 10;
+    const userPrompt = `Generate ${cardCount} flashcards for learning. 
 Target Language for cards (both front and back): ${aiLanguage}
 Topic/Prompt: ${aiPrompt}
 ${aiSourceText ? `Use the following source text as the sole basis for the flashcards:\n${aiSourceText}` : ''}
@@ -326,7 +328,7 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
 
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
@@ -716,7 +718,25 @@ Goodbye;Do widzenia
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Model AI</label>
+                    <select 
+                      className="form-input" 
+                      value={aiModel}
+                      onChange={(e) => {
+                        setAiModel(e.target.value);
+                        localStorage.setItem('google_ai_model', e.target.value);
+                      }}
+                      disabled={isGenerating}
+                      style={{ height: '42px', padding: '0 10px', background: 'var(--bg-input, rgba(255,255,255,0.05))', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+                    >
+                      <option value="gemini-2.5-flash" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 2.5 Flash</option>
+                      <option value="gemini-3.5-flash" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 3.5 Flash</option>
+                      <option value="gemini-2.5-pro" style={{ background: '#1e1e24', color: '#fff' }}>Gemini 2.5 Pro</option>
+                    </select>
+                  </div>
+
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label" style={{ fontSize: '0.8rem' }}>Liczba pytań</label>
                     <input 
@@ -724,8 +744,20 @@ Goodbye;Do widzenia
                       className="form-input" 
                       value={aiCardCount}
                       onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        setAiCardCount(isNaN(val) ? 10 : Math.max(1, Math.min(100, val)));
+                        const val = e.target.value;
+                        if (val === '') {
+                          setAiCardCount('');
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          setAiCardCount(isNaN(parsed) ? '' : parsed);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (aiCardCount === '' || aiCardCount < 1) {
+                          setAiCardCount(1);
+                        } else if (aiCardCount > 100) {
+                          setAiCardCount(100);
+                        }
                       }}
                       min={1}
                       max={100}

@@ -1286,34 +1286,36 @@ Gracias;Thank you`}
                   }}
                 >
                   <div className="flashcard-inner" style={{ height: 'auto', minHeight: 'inherit' }}>
-                    {/* Front preview */}
-                    <div className="flashcard-face flashcard-front" style={{ minHeight: '200px', height: 'auto', padding: '20px' }}>
-                      <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>
-                        Jak nazywa się stolica Francji?
-                      </span>
-                    </div>
-
-                    {/* Back preview */}
-                    <div className="flashcard-face flashcard-back" style={{ minHeight: '200px', height: 'auto', padding: '20px', paddingTop: '45px' }}>
-                      <div style={{
-                        position: 'absolute',
-                        top: '12px',
-                        left: '12px',
-                        right: '12px',
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)',
-                        opacity: 0.7,
-                        textAlign: 'center',
-                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                        paddingBottom: '4px',
-                        fontStyle: 'italic'
-                      }}>
-                        Jak nazywa się stolica Francji?
+                    {previewSide === 'front' ? (
+                      /* Front preview */
+                      <div className="flashcard-face flashcard-front" style={{ minHeight: '200px', height: 'auto', padding: '20px' }}>
+                        <span className="flashcard-text" style={{ fontSize: `${questionFontSize}px` }}>
+                          Jak nazywa się stolica Francji?
+                        </span>
                       </div>
-                      <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>
-                        Paryż (Paris) - to największe miasto i stolica Francji, położona w centrum Basenu Paryskiego, nad Sekwaną.
-                      </span>
-                    </div>
+                    ) : (
+                      /* Back preview */
+                      <div className="flashcard-face flashcard-back" style={{ minHeight: '200px', height: 'auto', padding: '20px', paddingTop: '45px' }}>
+                        <div style={{
+                          position: 'absolute',
+                          top: '12px',
+                          left: '12px',
+                          right: '12px',
+                          fontSize: '0.75rem',
+                          color: 'var(--text-secondary)',
+                          opacity: 0.7,
+                          textAlign: 'center',
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                          paddingBottom: '4px',
+                          fontStyle: 'italic'
+                        }}>
+                          Jak nazywa się stolica Francji?
+                        </div>
+                        <span className="flashcard-text" style={{ fontSize: `${answerFontSize}px` }}>
+                          Paryż (Paris) - to największe miasto i stolica Francji, położona w centrum Basenu Paryskiego, nad Sekwaną.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
