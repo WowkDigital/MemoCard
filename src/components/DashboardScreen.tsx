@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon, SlidersHorizontal, Database } from 'lucide-react';
+import { Plus, FolderPlus, LogOut, BookOpen, Settings, X, Layers, RefreshCw, User as UserIcon, SlidersHorizontal, Database, Sparkles } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import type { Deck, Card } from '../hooks/useFirestore';
 import type { User } from 'firebase/auth';
@@ -419,6 +419,15 @@ export function DashboardScreen({
     return a.name.localeCompare(b.name);
   });
 
+  const totalDecks = decks.length;
+  const totalCards = decks.reduce((sum, d) => sum + (deckStats[d.id]?.total ?? d.cardCount ?? 0), 0);
+  const totalDue = decks.reduce((sum, d) => sum + (deckStats[d.id]?.due ?? 0), 0);
+  const totalMastered = decks.reduce((sum, d) => sum + (deckStats[d.id]?.mastered ?? d.masteredCount ?? 0), 0);
+  const totalEaseFactor = decks.reduce((sum, d) => sum + (d.totalEaseFactor ?? 0), 0);
+  const totalEaseCount = decks.reduce((sum, d) => sum + (d.easeCount ?? 0), 0);
+  const avgEase = totalEaseCount > 0 ? (totalEaseFactor / totalEaseCount).toFixed(2) : '2.50';
+  const masteryRate = totalCards > 0 ? Math.round((totalMastered / totalCards) * 100) : 0;
+
   return (
     <div className="container">
       {/* Header */}
@@ -491,6 +500,79 @@ export function DashboardScreen({
 
       {/* Main Content */}
       <main style={{ flex: 1 }}>
+        {/* Global Stats Dashboard */}
+        {decks.length > 0 && (
+          <div className="stats-dashboard glass" style={{
+            padding: '20px',
+            borderRadius: '16px',
+            marginBottom: '24px',
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
+            border: '1px solid var(--border-light)',
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Database size={16} style={{ color: 'var(--primary)' }} />
+              Globalne Statystyki Nauki
+            </h3>
+            
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '16px'
+            }}>
+              {/* Stat 1: Total Decks */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Liczba talii</span>
+                <strong style={{ fontSize: '1.6rem', color: 'var(--text-primary)', fontWeight: 700 }}>{totalDecks}</strong>
+              </div>
+
+              {/* Stat 2: Total Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Unikalne fiszki</span>
+                <strong style={{ fontSize: '1.6rem', color: 'var(--primary)', fontWeight: 700 }}>{totalCards}</strong>
+              </div>
+
+              {/* Stat 3: Due Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Do powtórki</span>
+                <strong style={{ fontSize: '1.6rem', color: totalDue > 0 ? 'var(--color-again)' : 'var(--color-easy)', fontWeight: 700 }}>
+                  {totalDue}
+                </strong>
+              </div>
+
+              {/* Stat 4: Mastered Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Opanowane fiszki</span>
+                <strong style={{ fontSize: '1.6rem', color: 'var(--color-easy)', fontWeight: 700 }}>
+                  {totalMastered} <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-muted)' }}>({masteryRate}%)</span>
+                </strong>
+              </div>
+
+              {/* Stat 5: Avg Ease */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Średni wskaźnik łatwości</span>
+                <strong style={{ fontSize: '1.6rem', color: '#c084fc', fontWeight: 700 }}>{avgEase}</strong>
+              </div>
+            </div>
+
+            {totalCards > 0 && (
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <span>Poziom Opanowania Materiału</span>
+                  <span style={{ fontWeight: 600, color: 'var(--color-easy)' }}>{masteryRate}% ({totalMastered} z {totalCards})</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${masteryRate}%`, 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, var(--primary) 0%, var(--color-easy) 100%)',
+                    borderRadius: '3px',
+                    transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}></div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="section-title">
           <h2>Your Decks</h2>
           <div className="section-actions" style={{ display: 'flex', gap: '8px' }}>
@@ -771,31 +853,80 @@ export function DashboardScreen({
                       )}
                     </div>
                     
-                    {/* Action buttons (only icons, no text labels) */}
-                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                      <button 
-                        className="btn btn-secondary" 
-                        style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectDeckClick(deck);
-                        }}
-                        title="Manage cards"
-                      >
-                        <Settings size={14} />
-                      </button>
-                      <button 
-                        className="btn btn-primary" 
-                        style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartReviewClick(deck);
-                        }}
-                        disabled={(deckStats[deck.id]?.total ?? deck.cardCount) === 0}
-                        title={(deckStats[deck.id]?.total ?? deck.cardCount) === 0 ? "No cards to study" : "Start studying"}
-                      >
-                        <BookOpen size={14} />
-                      </button>
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                      {isExpanded ? (
+                        <>
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ 
+                              padding: '0 12px', 
+                              height: '36px', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '6px', 
+                              borderRadius: '8px', 
+                              fontSize: '0.8rem',
+                              width: 'auto'
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectDeckClick(deck);
+                            }}
+                            title="Dodawanie, edycja i generowanie fiszek przez AI"
+                          >
+                            <Sparkles size={14} style={{ color: 'var(--primary)' }} />
+                            <span>Zarządzaj & AI</span>
+                          </button>
+                          <button 
+                            className="btn btn-primary" 
+                            style={{ 
+                              padding: '0 12px', 
+                              height: '36px', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '6px', 
+                              borderRadius: '8px', 
+                              fontSize: '0.8rem',
+                              width: 'auto'
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartReviewClick(deck);
+                            }}
+                            disabled={(deckStats[deck.id]?.total ?? deck.cardCount) === 0}
+                          >
+                            <BookOpen size={14} />
+                            <span>Ucz się</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectDeckClick(deck);
+                            }}
+                            title="Zarządzaj fiszkami i AI"
+                          >
+                            <Sparkles size={14} style={{ color: 'var(--primary)' }} />
+                          </button>
+                          <button 
+                            className="btn btn-primary" 
+                            style={{ padding: '0', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartReviewClick(deck);
+                            }}
+                            disabled={(deckStats[deck.id]?.total ?? deck.cardCount) === 0}
+                            title={(deckStats[deck.id]?.total ?? deck.cardCount) === 0 ? "Brak kart do nauki" : "Rozpocznij naukę"}
+                          >
+                            <BookOpen size={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
