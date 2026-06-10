@@ -49,6 +49,10 @@ export function AiGeneratorTab({
   const [showKeyField, setShowKeyField] = useState(false);
   const [showKeyText, setShowKeyText] = useState(false);
 
+  // Manual fallback states
+  const [showManualJsonInput, setShowManualJsonInput] = useState(false);
+  const [manualJsonText, setManualJsonText] = useState('');
+
   const handleGenerateAICards = async () => {
     const apiKey = googleApiKey || localStorage.getItem('google_ai_api_key') || '';
     if (!apiKey) {
@@ -201,6 +205,73 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
     localStorage.setItem('google_ai_api_key', trimmed);
   };
 
+  const handleCopyPrompt = () => {
+    if (!aiPrompt.trim() && !aiSourceText.trim()) {
+      showToast('Wpisz temat lub wklej tekst źródłowy przed skopiowaniem promptu.', 'error');
+      return;
+    }
+    const cardCount = typeof aiCardCount === 'number' ? Math.max(1, Math.min(100, aiCardCount)) : 10;
+    const qLang = aiQuestionLangSelect === 'custom' ? aiQuestionLang : aiQuestionLangSelect;
+    const aLang = aiAnswerLangSelect === 'custom' ? aiAnswerLang : aiAnswerLangSelect;
+    const userPrompt = `Generate ${cardCount} flashcards for learning. 
+Front language (Questions/Terms): ${qLang}
+Back language (Answers/Explanations): ${aLang}
+Card text length constraint: ${aiCardLength} (short = extremely concise single words or short phrases, medium = standard length sentences or definitions, long = detailed explanations and detailed answers)
+Topic/Prompt: ${aiPrompt}
+${aiSourceText ? `Use the following source text as the sole basis for the flashcards:\n${aiSourceText}` : ''}
+Generate clear, educational questions/terms/phrases on the front and accurate, concise answers/translations/explanations on the back. Ensure the length of front and back conforms strictly to the requested card text length constraint.
+
+You MUST respond strictly with a JSON object matching this schema:
+{
+  "cards": [
+    {
+      "front": "Question, term, or prompt",
+      "back": "Answer, translation, or definition"
+    }
+  ]
+}`;
+
+    navigator.clipboard.writeText(userPrompt);
+    showToast('Prompt skopiowany do schowka!', 'success');
+  };
+
+  const handleLoadManualJson = () => {
+    try {
+      let cleanText = manualJsonText.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```(?:json)?\n?/i, '').replace(/```$/, '').trim();
+      }
+
+      const parsed = JSON.parse(cleanText);
+      if (!parsed.cards || !Array.isArray(parsed.cards)) {
+        throw new Error('Response does not contain a valid cards array.');
+      }
+
+      interface AICard {
+        front?: string;
+        back?: string;
+      }
+
+      const formattedCards = (parsed.cards as AICard[]).map((c) => ({
+        front: String(c.front || '').trim(),
+        back: String(c.back || '').trim(),
+        selected: true,
+      })).filter((c) => c.front && c.back);
+
+      if (formattedCards.length === 0) {
+        throw new Error('No valid cards found in JSON.');
+      }
+
+      setGeneratedCards(formattedCards);
+      setShowManualJsonInput(false);
+      setManualJsonText('');
+      showToast(`Pomyślnie załadowano ${formattedCards.length} kart!`, 'success');
+    } catch (err) {
+      const error = err as Error;
+      showToast(`Błąd parsowania JSON: ${error.message}`, 'error');
+    }
+  };
+
   return (
     <div>
       {/* Inline API Key Management */}
@@ -298,12 +369,7 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
         </div>
       )}
 
-      {!googleApiKey ? (
-        <div style={{ textAlign: 'center', padding: '24px 0', opacity: 0.6 }}>
-          <p style={{ margin: 0, fontSize: '0.9rem' }}>Please save your API key above to use the AI Generator.</p>
-        </div>
-      ) : (
-        <div>
+      <div>
           {generatedCards.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-row-grid">
@@ -539,7 +605,8 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
                   className="btn btn-primary" 
                   style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                   onClick={handleGenerateAICards}
-                  disabled={isGenerating}
+                  disabled={isGenerating || !googleApiKey}
+                  title={!googleApiKey ? "Skonfiguruj klucz API powyżej, aby automatycznie generować przez Gemini" : undefined}
                 >
                   {isGenerating ? (
                     <>
@@ -553,6 +620,82 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
                     </>
                   )}
                 </button>
+              </div>
+
+              {/* Fallback Prompt Copy / Paste JSON response */}
+              <div style={{ 
+                marginTop: '20px', 
+                padding: '16px', 
+                background: 'rgba(255,255,255,0.02)', 
+                borderRadius: '12px', 
+                border: '1px dashed var(--border-light)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Opcja alternatywna (własny model AI)
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Skopiuj pełny prompt ze swoimi ustawieniami do schowka, uruchom go w ChatGPT / Claude / lokalnym LLM, a następnie wklej otrzymaną odpowiedź JSON poniżej.
+                  </span>
+                </div>
+
+                {!showManualJsonInput ? (
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      style={{ flex: 1, height: '36px', fontSize: '0.8rem', padding: '0 12px' }}
+                      onClick={handleCopyPrompt}
+                      disabled={isGenerating}
+                    >
+                      Kopiuj Prompt
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      style={{ flex: 1, height: '36px', fontSize: '0.8rem', padding: '0 12px' }}
+                      onClick={() => setShowManualJsonInput(true)}
+                      disabled={isGenerating}
+                    >
+                      Wklej odpowiedź JSON
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <textarea 
+                      className="form-input" 
+                      style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.75rem', resize: 'vertical' }}
+                      placeholder='Wklej wygenerowany JSON (musi zawierać obiekt {"cards": [{"front": "...", "back": "..."}]})...'
+                      value={manualJsonText}
+                      onChange={(e) => setManualJsonText(e.target.value)}
+                    />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary" 
+                        style={{ flex: 1, height: '32px', fontSize: '0.75rem', padding: '0 8px' }}
+                        onClick={() => {
+                          setShowManualJsonInput(false);
+                          setManualJsonText('');
+                        }}
+                      >
+                        Anuluj
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn btn-primary" 
+                        style={{ flex: 2, height: '32px', fontSize: '0.75rem', padding: '0 8px' }}
+                        onClick={handleLoadManualJson}
+                        disabled={!manualJsonText.trim()}
+                      >
+                        Załaduj karty
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -654,7 +797,6 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
-}
+      </div>
+    );
+  }

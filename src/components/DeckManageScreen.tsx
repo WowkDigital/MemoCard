@@ -99,6 +99,8 @@ export function DeckManageScreen({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generatedCards, setGeneratedCards] = useState<{ front: string; back: string; selected: boolean }[]>([]);
+  const [showManualJsonInput, setShowManualJsonInput] = useState(false);
+  const [manualJsonText, setManualJsonText] = useState('');
 
   const [visibleCount, setVisibleCount] = useState(20);
 
@@ -392,6 +394,69 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
       showToast('Generowanie nie powiodło się.', 'error');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleCopyPrompt = () => {
+    const cardCount = typeof aiCardCount === 'number' ? Math.max(1, Math.min(100, aiCardCount)) : 10;
+    const qLang = aiQuestionLangSelect === 'custom' ? aiQuestionLang : aiQuestionLangSelect;
+    const aLang = aiAnswerLangSelect === 'custom' ? aiAnswerLang : aiAnswerLangSelect;
+    const userPrompt = `Generate ${cardCount} flashcards for learning. 
+Front language (Questions/Terms): ${qLang}
+Back language (Answers/Explanations): ${aLang}
+Card text length constraint: ${aiCardLength} (short = extremely concise single words or short phrases, medium = standard length sentences or definitions, long = detailed explanations and detailed answers)
+Topic/Prompt: ${aiPrompt}
+${aiSourceText ? `Use the following source text as the sole basis for the flashcards:\n${aiSourceText}` : ''}
+Generate clear, educational questions/terms/phrases on the front and accurate, concise answers/translations/explanations on the back. Ensure the length of front and back conforms strictly to the requested card text length constraint.
+
+You MUST respond strictly with a JSON object matching this schema:
+{
+  "cards": [
+    {
+      "front": "Question, term, or prompt",
+      "back": "Answer, translation, or definition"
+    }
+  ]
+}`;
+
+    navigator.clipboard.writeText(userPrompt);
+    showToast('Prompt skopiowany do schowka!', 'success');
+  };
+
+  const handleLoadManualJson = () => {
+    try {
+      let cleanText = manualJsonText.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```(?:json)?\n?/i, '').replace(/```$/, '').trim();
+      }
+
+      const parsed = JSON.parse(cleanText);
+      if (!parsed.cards || !Array.isArray(parsed.cards)) {
+        throw new Error('Response does not contain a valid cards array.');
+      }
+
+      interface AICard {
+        front?: string;
+        back?: string;
+      }
+
+      const formattedCards = (parsed.cards as AICard[]).map((c) => ({
+        front: String(c.front || '').trim(),
+        back: String(c.back || '').trim(),
+        selected: true,
+      })).filter((c) => c.front && c.back);
+
+      if (formattedCards.length === 0) {
+        throw new Error('No valid cards found in JSON.');
+      }
+
+      setGeneratedCards(formattedCards);
+      setShowManualJsonInput(false);
+      setManualJsonText('');
+      showToast(`Pomyślnie załadowano ${formattedCards.length} kart!`, 'success');
+    } catch (err) {
+      const error = err as Error;
+      showToast(`Błąd parsowania JSON: ${error.message}`, 'error');
     }
   };
 
@@ -879,6 +944,83 @@ Goodbye;Do widzenia
                     </>
                   )}
                 </button>
+
+                {/* Fallback Prompt Copy / Paste JSON response */}
+                <div style={{ 
+                  marginTop: '16px', 
+                  padding: '12px', 
+                  background: 'rgba(255,255,255,0.02)', 
+                  borderRadius: '10px', 
+                  border: '1px dashed var(--border-light)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  width: '100%'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Opcja alternatywna (własny model AI)
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      Skopiuj prompt ze swoimi ustawieniami, uruchom go w innym modelu i wklej odpowiedź JSON poniżej.
+                    </span>
+                  </div>
+
+                  {!showManualJsonInput ? (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary" 
+                        style={{ flex: 1, height: '34px', fontSize: '0.75rem', padding: '0 8px' }}
+                        onClick={handleCopyPrompt}
+                        disabled={isGenerating}
+                      >
+                        Kopiuj Prompt
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary" 
+                        style={{ flex: 1, height: '34px', fontSize: '0.75rem', padding: '0 8px' }}
+                        onClick={() => setShowManualJsonInput(true)}
+                        disabled={isGenerating}
+                      >
+                        Wklej odpowiedź JSON
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <textarea 
+                        className="form-input" 
+                        style={{ minHeight: '100px', fontFamily: 'monospace', fontSize: '0.75rem', resize: 'vertical' }}
+                        placeholder='Wklej JSON (np. {"cards": [{"front": "...", "back": "..."}]})...'
+                        value={manualJsonText}
+                        onChange={(e) => setManualJsonText(e.target.value)}
+                      />
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          type="button" 
+                          className="btn btn-secondary" 
+                          style={{ flex: 1, height: '30px', fontSize: '0.7rem', padding: '0 6px' }}
+                          onClick={() => {
+                            setShowManualJsonInput(false);
+                            setManualJsonText('');
+                          }}
+                        >
+                          Anuluj
+                        </button>
+                        <button 
+                          type="button" 
+                          className="btn btn-primary" 
+                          style={{ flex: 2, height: '30px', fontSize: '0.7rem', padding: '0 6px' }}
+                          onClick={handleLoadManualJson}
+                          disabled={!manualJsonText.trim()}
+                        >
+                          Załaduj karty
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {generationError && (
                   <div style={{ 
