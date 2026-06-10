@@ -77,7 +77,10 @@ Back language (Answers/Explanations): ${aLang}
 Card text length constraint: ${aiCardLength} (short = extremely concise single words or short phrases, medium = standard length sentences or definitions, long = detailed explanations and detailed answers)
 Topic/Prompt: ${aiPrompt}
 ${aiSourceText ? `Use the following source text as the sole basis for the flashcards:\n${aiSourceText}` : ''}
-Generate clear, educational questions/terms/phrases on the front and accurate, concise answers/translations/explanations on the back. Ensure the length of front and back conforms strictly to the requested card text length constraint.`;
+Generate clear, educational questions/terms/phrases on the front and accurate, concise answers/translations/explanations on the back. Ensure the length of front and back conforms strictly to the requested card text length constraint.
+
+${!aiDeckName.trim() ? 'Also, generate a suitable concise title for the deck based on the topic and write it to the "name" property.' : 'The title/name of the deck is already provided: ' + aiDeckName + '. You can write this title to the "name" property.'}
+${!aiDeckDesc.trim() ? 'Also, generate a suitable brief description for the deck based on the topic/prompt and write it to the "description" property.' : 'The description of the deck is already provided: ' + aiDeckDesc + '. You can write this description to the "description" property.'}`;
 
     const requestBody = {
       contents: [
@@ -94,6 +97,8 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
         responseSchema: {
           type: "OBJECT",
           properties: {
+            name: { type: "STRING", description: "A suitable title/name for the deck." },
+            description: { type: "STRING", description: "A suitable brief description for the deck." },
             cards: {
               type: "ARRAY",
               description: "List of generated flashcards",
@@ -107,7 +112,7 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
               }
             }
           },
-          required: ["cards"]
+          required: ["name", "description", "cards"]
         }
       }
     };
@@ -144,6 +149,13 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
       const parsed = JSON.parse(cleanText);
       if (!parsed.cards || !Array.isArray(parsed.cards)) {
         throw new Error('Response does not contain a valid cards array.');
+      }
+
+      if (!aiDeckName.trim() && parsed.name) {
+        setAiDeckName(String(parsed.name).trim());
+      }
+      if (!aiDeckDesc.trim() && parsed.description) {
+        setAiDeckDesc(String(parsed.description).trim());
       }
 
       interface AICard {
@@ -221,8 +233,13 @@ Topic/Prompt: ${aiPrompt}
 ${aiSourceText ? `Use the following source text as the sole basis for the flashcards:\n${aiSourceText}` : ''}
 Generate clear, educational questions/terms/phrases on the front and accurate, concise answers/translations/explanations on the back. Ensure the length of front and back conforms strictly to the requested card text length constraint.
 
+${!aiDeckName.trim() ? 'Also, generate a suitable concise title for the deck based on the topic and write it to the "name" property.' : 'The title/name of the deck is already provided: ' + aiDeckName + '. You can write this title to the "name" property.'}
+${!aiDeckDesc.trim() ? 'Also, generate a suitable brief description for the deck based on the topic/prompt and write it to the "description" property.' : 'The description of the deck is already provided: ' + aiDeckDesc + '. You can write this description to the "description" property.'}
+
 You MUST respond strictly with a JSON object matching this schema:
 {
+  "name": "Title of the deck",
+  "description": "Brief description of the deck",
   "cards": [
     {
       "front": "Question, term, or prompt",
@@ -245,6 +262,13 @@ You MUST respond strictly with a JSON object matching this schema:
       const parsed = JSON.parse(cleanText);
       if (!parsed.cards || !Array.isArray(parsed.cards)) {
         throw new Error('Response does not contain a valid cards array.');
+      }
+
+      if (!aiDeckName.trim() && parsed.name) {
+        setAiDeckName(String(parsed.name).trim());
+      }
+      if (!aiDeckDesc.trim() && parsed.description) {
+        setAiDeckDesc(String(parsed.description).trim());
       }
 
       interface AICard {
