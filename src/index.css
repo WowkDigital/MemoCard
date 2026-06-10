@@ -348,6 +348,9 @@ body {
   width: 100%;
   max-width: 440px;
   padding: 28px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100svh - 32px);
+  overflow-y: auto;
 }
 
 .modal-header {
