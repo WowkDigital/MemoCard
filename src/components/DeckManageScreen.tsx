@@ -89,7 +89,11 @@ export function DeckManageScreen({
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiSourceText, setAiSourceText] = useState('');
   const [aiCardCount, setAiCardCount] = useState<number | ''>(10);
-  const [aiLanguage, setAiLanguage] = useState('polski');
+  const [aiQuestionLangSelect, setAiQuestionLangSelect] = useState('polski');
+  const [aiQuestionLang, setAiQuestionLang] = useState('polski');
+  const [aiAnswerLangSelect, setAiAnswerLangSelect] = useState('angielski');
+  const [aiAnswerLang, setAiAnswerLang] = useState('angielski');
+  const [aiCardLength, setAiCardLength] = useState<'short' | 'medium' | 'long'>('medium');
   const [aiModel, setAiModel] = useState(() => localStorage.getItem('google_ai_model') || 'gemini-2.5-flash');
   
   const [isGenerating, setIsGenerating] = useState(false);
@@ -287,11 +291,15 @@ export function DeckManageScreen({
     setGeneratedCards([]);
 
     const cardCount = typeof aiCardCount === 'number' ? Math.max(1, Math.min(100, aiCardCount)) : 10;
+    const qLang = aiQuestionLangSelect === 'custom' ? aiQuestionLang : aiQuestionLangSelect;
+    const aLang = aiAnswerLangSelect === 'custom' ? aiAnswerLang : aiAnswerLangSelect;
     const userPrompt = `Generate ${cardCount} flashcards for learning. 
-Target Language for cards (both front and back): ${aiLanguage}
+Front language (Questions/Terms): ${qLang}
+Back language (Answers/Explanations): ${aLang}
+Card text length constraint: ${aiCardLength} (short = extremely concise single words or short phrases, medium = standard length sentences or definitions, long = detailed explanations and detailed answers)
 Topic/Prompt: ${aiPrompt}
 ${aiSourceText ? `Use the following source text as the sole basis for the flashcards:\n${aiSourceText}` : ''}
-Generate clear, educational questions/terms/phrases on the front and accurate, concise answers/translations/explanations on the back.`;
+Generate clear, educational questions/terms/phrases on the front and accurate, concise answers/translations/explanations on the back. Ensure the length of front and back conforms strictly to the requested card text length constraint.`;
 
     const requestBody = {
       contents: [
@@ -350,7 +358,12 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
         throw new Error('Otrzymano pustą odpowiedź od Google AI.');
       }
 
-      const parsed = JSON.parse(textContent);
+      let cleanText = textContent.trim();
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```(?:json)?\n?/i, '').replace(/```$/, '').trim();
+      }
+
+      const parsed = JSON.parse(cleanText);
       if (!parsed.cards || !Array.isArray(parsed.cards)) {
         throw new Error('Odpowiedź nie zawiera poprawnej tablicy kart.');
       }
@@ -396,7 +409,6 @@ Generate clear, educational questions/terms/phrases on the front and accurate, c
       setGeneratedCards([]);
       setAiPrompt('');
       setAiSourceText('');
-      setAddMode('manual');
     } catch (err) {
       console.error(err);
       showToast('Failed to save generated cards.', 'error');
@@ -692,14 +704,14 @@ Goodbye;Do widzenia
 
                 {/* Prompt parameters */}
                 <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.85rem' }}>Topic or subject to generate</label>
-                  <input 
-                    type="text" 
+                  <label className="form-label" style={{ fontSize: '0.85rem', fontWeight: 600 }}>Input Prompt / Topic (Opisz jakiego typu karty chcesz wygenerować)</label>
+                  <textarea 
                     className="form-input" 
-                    placeholder="e.g. Italian basics, European capitals, basic JavaScript" 
+                    placeholder="e.g. Słownictwo angielskie na poziomie C1 z tematu 'Biznes i finanse'. Skup się na phrasal verbs i idiomach. Albo: Advanced React patterns, hooks and performance optimization concepts." 
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
                     disabled={isGenerating}
+                    style={{ minHeight: '100px', resize: 'vertical', fontSize: '0.9rem' }}
                   />
                 </div>
 
@@ -718,7 +730,7 @@ Goodbye;Do widzenia
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label" style={{ fontSize: '0.8rem' }}>AI Model</label>
                     <select 
@@ -764,17 +776,87 @@ Goodbye;Do widzenia
                       disabled={isGenerating}
                     />
                   </div>
-                  
+                </div>
+
+                {/* Language & Length Settings */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Target language</label>
-                    <input 
-                      type="text" 
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Język pytań (Front)</label>
+                    <select 
                       className="form-input" 
-                      value={aiLanguage}
-                      onChange={(e) => setAiLanguage(e.target.value)}
-                      placeholder="e.g. English, Polish"
+                      value={aiQuestionLangSelect}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAiQuestionLangSelect(val);
+                        if (val !== 'custom') {
+                          setAiQuestionLang(val);
+                        }
+                      }}
                       disabled={isGenerating}
-                    />
+                      style={{ height: '42px', padding: '0 10px', background: 'var(--bg-input, rgba(255,255,255,0.05))', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+                    >
+                      <option value="polski" style={{ background: '#1e1e24', color: '#fff' }}>Polski</option>
+                      <option value="angielski" style={{ background: '#1e1e24', color: '#fff' }}>Angielski</option>
+                      <option value="custom" style={{ background: '#1e1e24', color: '#fff' }}>Inny...</option>
+                    </select>
+                    {aiQuestionLangSelect === 'custom' && (
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ marginTop: '6px', height: '36px', fontSize: '0.8rem' }}
+                        placeholder="Wpisz język..." 
+                        value={aiQuestionLang}
+                        onChange={(e) => setAiQuestionLang(e.target.value)}
+                        disabled={isGenerating}
+                      />
+                    )}
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Język odpowiedzi (Back)</label>
+                    <select 
+                      className="form-input" 
+                      value={aiAnswerLangSelect}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAiAnswerLangSelect(val);
+                        if (val !== 'custom') {
+                          setAiAnswerLang(val);
+                        }
+                      }}
+                      disabled={isGenerating}
+                      style={{ height: '42px', padding: '0 10px', background: 'var(--bg-input, rgba(255,255,255,0.05))', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+                    >
+                      <option value="polski" style={{ background: '#1e1e24', color: '#fff' }}>Polski</option>
+                      <option value="angielski" style={{ background: '#1e1e24', color: '#fff' }}>Angielski</option>
+                      <option value="custom" style={{ background: '#1e1e24', color: '#fff' }}>Inny...</option>
+                    </select>
+                    {aiAnswerLangSelect === 'custom' && (
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        style={{ marginTop: '6px', height: '36px', fontSize: '0.8rem' }}
+                        placeholder="Wpisz język..." 
+                        value={aiAnswerLang}
+                        onChange={(e) => setAiAnswerLang(e.target.value)}
+                        disabled={isGenerating}
+                      />
+                    )}
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Długość kart</label>
+                    <select 
+                      className="form-input" 
+                      value={aiCardLength}
+                      onChange={(e) => setAiCardLength(e.target.value as 'short' | 'medium' | 'long')}
+                      disabled={isGenerating}
+                      style={{ height: '42px', padding: '0 10px', background: 'var(--bg-input, rgba(255,255,255,0.05))', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+                    >
+                      <option value="short" style={{ background: '#1e1e24', color: '#fff' }}>Short</option>
+                      <option value="medium" style={{ background: '#1e1e24', color: '#fff' }}>Medium</option>
+                      <option value="long" style={{ background: '#1e1e24', color: '#fff' }}>Long</option>
+                    </select>
                   </div>
                 </div>
 
